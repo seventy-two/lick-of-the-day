@@ -335,6 +335,47 @@ void testLick() {
     riff.masterBars.resize(8);
     riff.tracks[0].staff.bars.resize(8);
     CHECK(!FindLick(riff, 7).has_value());
+    // A tremolo riff (one low note picked over and over) isn't a solo, even
+    // in a section the tab names as one.
+    auto riffSong = [](int bars, int noteFret, bool tremolo) {
+        Score r;
+        r.tempo = 160;
+        Track t;
+        t.program = 30;
+        t.staff.tuning = {64, 59, 55, 50, 45, 40};
+        for (int b = 0; b < bars; b++) {
+            r.masterBars.push_back(MasterBar{});
+            Bar bar;
+            bar.voices.emplace_back();
+            for (int i = 0; i < 16; i++) {
+                Beat beat;
+                beat.duration = 16;
+                Note n;
+                n.string = 2;
+                n.fret = tremolo ? (i % 8 == 0 ? noteFret + 2 : noteFret) : noteFret + i % 4;
+                n.palmMute = !tremolo;
+                beat.notes.push_back(n);
+                bar.voices[0].beats.push_back(beat);
+            }
+            t.staff.bars.push_back(bar);
+        }
+        r.tracks.push_back(t);
+        return r;
+    };
+    Score trem = riffSong(16, 3, true);
+    trem.masterBars[4].hasSection = true;
+    trem.masterBars[4].section = "Solo";
+    Finish(trem);
+    CHECK(FindSolos(trem).empty());
+    // A solo named in the tab's last section counts for 16 bars, not to the
+    // end of the song.
+    Score open = riffSong(40, 7, false);
+    open.masterBars[0].hasSection = true;
+    open.masterBars[0].section = "Solo";
+    Finish(open);
+    auto os = FindSolos(open);
+    CHECK(!os.empty() && os[0].end <= 17);
+
     // A solo marked done is left out.
     CHECK(!FindLick(s, 7, {{9, 12}}).has_value());
     CHECK(FindLick(s, 7, {{0, 4}}).has_value());

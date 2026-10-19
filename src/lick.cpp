@@ -49,10 +49,30 @@ std::vector<std::string> SectionNames(const Score& score) {
     return out;
 }
 
+namespace {
+
+// soloBars marks the bars in a section named as a solo. The last section
+// runs to the end of the song, as far as the tab says, so a solo named
+// there counts for only kOpenSolo bars: tabs that mark the section after a
+// solo show nine in ten are no longer than 32, half no longer than 16.
+const int kOpenSolo = 16;
+
+std::vector<bool> soloBars(const Score& score, const std::vector<std::string>& names) {
+    std::vector<bool> out(names.size());
+    int last = -1;
+    for (int i = 0; i < int(score.masterBars.size()); i++)
+        if (score.masterBars[size_t(i)].hasSection) last = i;
+    for (size_t i = 0; i < names.size(); i++)
+        out[i] = soloName(names[i]) && !(last >= 0 && int(i) >= last + kOpenSolo);
+    return out;
+}
+
+}  // namespace
+
 BarFeatures Features(const Bar& bar, const MasterBar& mb, const Staff& staff) {
     BarFeatures f;
     f.quarters = mb.Quarters();
-    int fretSum = 0, fretN = 0;
+    int fretSum = 0, fretN = 0, lastPitch = -1;
     std::set<int> pitches;
     for (size_t v = 0; v < bar.voices.size(); v++) {
         for (const auto& b : bar.voices[v].beats) {
@@ -76,6 +96,14 @@ BarFeatures Features(const Bar& bar, const MasterBar& mb, const Staff& staff) {
             if (!sounding) continue;
             f.beats++;
             f.notes += sounding;
+            if (first) {
+                // The same note again (the lowest, for double stops): tremolo picking.
+                int low = 1000;
+                for (const auto& n : b.notes)
+                    if (!n.tieDestination && !n.dead) low = std::min(low, staff.StringPitch(n.string) + n.fret);
+                if (low == lastPitch) f.repeated++;
+                lastPitch = low;
+            }
             if (sounding <= 2) f.single++;  // single notes and double stops
             else f.chords++;
             if (b.tap || b.slap || b.pop) f.tech++;
@@ -101,6 +129,7 @@ BarFeatures Features(const Bar& bar, const MasterBar& mb, const Staff& staff) {
     f.chordFrac = f.beats ? double(f.chords) / f.beats : 0;
     f.palmFrac = f.notes ? double(f.palm) / f.notes : 0;
     f.avgFret = fretN ? double(fretSum) / fretN : 0;
+    f.repeatFrac = f.beats ? double(f.repeated) / f.beats : 0;
     return f;
 }
 
@@ -116,6 +145,9 @@ double LeadScore(const BarFeatures& f, int repeats, bool unison) {
     s += f.pitches >= 6 ? 0.6 : f.pitches >= 4 ? 0.2 : -0.6;
     if (repeats > 3) s -= 1.8;
     else if (repeats > 1) s -= 0.6;
+    // The same note picked over and over, low on the neck: a tremolo riff
+    // (tremolo-picked leads sit higher up).
+    if (f.avgFret < 10) s -= std::clamp((f.repeatFrac - 0.6) * 8, 0.0, 3.0);
     if (unison) s -= 0.8;  // another guitar plays exactly the same: a riff, or a harmony line
     return s;
 }
@@ -123,6 +155,7 @@ double LeadScore(const BarFeatures& f, int repeats, bool unison) {
 std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold) {
     auto tracks = GuitarTracks(score);
     auto names = SectionNames(score);
+    auto solo = soloBars(score, names);
     std::map<const Track*, std::vector<BarFeatures>> feats;
     for (const Track* t : tracks) {
         auto& v = feats[t];
@@ -147,7 +180,10 @@ std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold
             auto c = counts.find(f.print);
             double s = LeadScore(f, c == counts.end() ? 0 : c->second, unison && f.beats > 0) + nameBonus;
             if (useLabels && !names[i].empty()) {
-                if (soloName(names[i])) s += 2.5;
+                // A tremolo riff in a section named as a solo is the band
+                // under a solo the tab leaves out.
+                bool riff = f.avgFret < 10 && f.repeatFrac >= 0.6;
+                if (solo[i] && !riff) s += 2.5;
                 else if (has(names[i], kOtherSection)) s -= 0.7;
             }
             raw[i] = s;
@@ -192,7 +228,7 @@ std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold
                 for (double x : s.raw) sum += x;
                 s.mean = sum / s.raw.size();
                 s.score = s.mean * std::sqrt(double(j - i));
-                for (size_t k = i; k < j; k++) s.labelled |= soloName(names[k]);
+                for (size_t k = i; k < j; k++) s.labelled |= bool(solo[k]);
                 out.push_back(std::move(s));
             }
             i = j;

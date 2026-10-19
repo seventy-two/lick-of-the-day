@@ -19,8 +19,10 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   on count for a lot. Otherwise it's the notes: each bar of each guitar
   track is scored for busy single notes and double stops up the neck,
   bends, slides, hammer-ons, tapping and vibrato, against palm muting,
-  chords, bars repeated over and over, and another guitar playing the same
-  thing. A run of four or more high-scoring bars is a solo. Tested with the
+  chords, tremolo riffs (one low note picked over and over), bars repeated
+  over and over, and another guitar playing the same thing. A section
+  named as a solo doesn't make a tremolo riff one, and when it's the tab's
+  last marker it counts for 16 bars, not to the end of the song. A run of four or more high-scoring bars is a solo. Tested with the
   labels hidden on the 282 tabs that have them, the top pick falls in a
   labelled solo about 85% of the time.
 - **Picks the lick**: a phrase of the solo that stands on its own. Phrases

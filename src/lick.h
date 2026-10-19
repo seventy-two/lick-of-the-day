@@ -17,8 +17,9 @@ namespace dl {
 struct BarFeatures {
     double quarters = 4;
     int beats = 0, single = 0, chords = 0, notes = 0, palm = 0, pitches = 0;
+    int repeated = 0;  // beats playing the note the one before did
     double tech = 0;
-    double density = 0, singleFrac = 0, chordFrac = 0, palmFrac = 0, avgFret = 0;
+    double density = 0, singleFrac = 0, chordFrac = 0, palmFrac = 0, avgFret = 0, repeatFrac = 0;
     std::string print;  // the first voice's notes, to spot repeated bars
 };
 
