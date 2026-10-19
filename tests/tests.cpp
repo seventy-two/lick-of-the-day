@@ -335,6 +335,58 @@ void testLick() {
     riff.masterBars.resize(8);
     riff.tracks[0].staff.bars.resize(8);
     CHECK(!FindLick(riff, 7).has_value());
+    // A solo marked done is left out.
+    CHECK(!FindLick(s, 7, {{9, 12}}).has_value());
+    CHECK(FindLick(s, 7, {{0, 4}}).has_value());
+}
+
+void testKept() {
+    namespace fs = std::filesystem;
+    fs::path dir = fs::temp_directory_path() / "dailylick-tests-kept";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    State s;
+    SavedLick a;
+    a.path = "a/Song One.gp5";
+    a.title = "Song One";
+    a.startBar = 8;
+    a.bars = 4;
+    a.soloStart = 8;
+    a.soloEnd = 14;
+    s.favourites.push_back({a, "2026-10-19"});
+    s.done.push_back({a, "2026-10-20"});
+    CHECK(SaveState(dir.u8string(), s));
+    State r = LoadState(dir.u8string());
+    CHECK_EQ(r.favourites.size(), size_t(1));
+    CHECK_EQ(r.done.size(), size_t(1));
+    if (!r.favourites.empty()) {
+        CHECK(SameLick(r.favourites[0].lick, a));
+        CHECK_EQ(r.favourites[0].date, std::string("2026-10-19"));
+        CHECK_EQ(r.favourites[0].lick.title, std::string("Song One"));
+    }
+    // Done goes by the song's solo, in any version of the file.
+    auto bars = DoneBars(r, "b/song_one (ver 2).gpx");
+    CHECK_EQ(bars.size(), size_t(1));
+    if (!bars.empty()) CHECK(bars[0] == std::make_pair(8, 14));
+    CHECK(DoneBars(r, "a/Song Two.gp5").empty());
+    SavedLick other = a;
+    other.path = "b/Song One.gpx";
+    other.startBar = 12;
+    CHECK(SameSolo(a, other) && !SameLick(a, other));
+    other.soloStart = 20;
+    other.soloEnd = 28;
+    CHECK(!SameSolo(a, other));
+
+    // Daily's toggles keep the lists.
+    Daily d(dir.u8string(), Config{});
+    CHECK(!d.ToggleFavourite(a, "2026-10-21"));  // was on: now off
+    CHECK(d.Favourites().empty());
+    CHECK(d.ToggleFavourite(a, "2026-10-21"));
+    CHECK(!d.ToggleDone(a, "2026-10-21"));
+    CHECK(d.Done().empty());
+    State saved = LoadState(dir.u8string());
+    CHECK(saved.done.empty() && saved.favourites.size() == 1);
+    fs::remove_all(dir);
 }
 
 void testPhrases() {
@@ -433,6 +485,7 @@ int main() {
     testSequence();
     testLick();
     testPhrases();
+    testKept();
     testPlayer();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

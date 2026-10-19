@@ -337,9 +337,14 @@ std::optional<Lick> PickLick(const Score& score, const Solo& solo, uint32_t seed
     return l;
 }
 
-std::optional<Lick> FindLick(const Score& score, uint32_t seed) {
+std::optional<Lick> FindLick(const Score& score, uint32_t seed, const std::vector<std::pair<int, int>>& skip) {
     auto solos = FindSolos(score);
-    for (size_t i = 0; i < solos.size() && i < 3; i++) {
+    int tried = 0;
+    for (size_t i = 0; i < solos.size() && tried < 3; i++) {
+        bool done = false;
+        for (const auto& [a, b] : skip) done |= solos[i].start < b && a < solos[i].end;
+        if (done) continue;
+        tried++;
         if (auto l = PickLick(score, solos[i], seed)) {
             auto names = SectionNames(score);
             l->section = names[size_t(l->startBar)];

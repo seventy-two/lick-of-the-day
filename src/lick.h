@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "model.h"
@@ -68,8 +69,9 @@ std::vector<int> PhraseStarts(const Score& score, int anchor, int to);
 // sitting, else half or a quarter of one.
 std::optional<Lick> PickLick(const Score& score, const Solo& solo, uint32_t seed);
 
-// FindLick is the whole job for one score.
-std::optional<Lick> FindLick(const Score& score, uint32_t seed);
+// FindLick is the whole job for one score, leaving out solos that overlap
+// the bars in skip (solos already done).
+std::optional<Lick> FindLick(const Score& score, uint32_t seed, const std::vector<std::pair<int, int>>& skip = {});
 
 // Rng is mulberry32, a small seeded generator, giving numbers in [0, 1).
 class Rng {

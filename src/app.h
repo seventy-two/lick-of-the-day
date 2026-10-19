@@ -45,6 +45,14 @@ public:
 
 private:
     void startFind(bool skip);
+    // startOpen loads a kept lick (from date) in place of today's.
+    void startOpen(const SavedLick& lick, const std::string& date);
+    void startJob(std::function<std::optional<Found>()> job, bool open);
+    void refreshKept();
+    bool isFavourite(const SavedLick& l) const;
+    bool isDone(const SavedLick& l) const;
+    void toggleFavourite(const SavedLick& l);
+    void toggleDone(const SavedLick& l);
     void show(Found f);
     void loadSequence();
     void playPause();
@@ -59,6 +67,7 @@ private:
 
     void drawInfo(float width, float height);
     void drawTab(float width, float height);
+    void drawKept();  // the favourites and history popup
     bool button(const char* label, bool on = false, bool accent = false, const char* tip = nullptr);
     bool link(const char* label, bool on = false, const char* tip = nullptr);
 
@@ -78,10 +87,16 @@ private:
     bool pendingDone_ = false;
     std::string progress_;
     std::atomic<bool> searching_{false};
+    bool opening_ = false;  // the job is opening a kept lick, not finding one
 
     std::optional<Found> lick_;
     std::string date_;  // the day shown
     std::string message_;
+    std::string notice_;      // a passing message for the status line
+    bool browsing_ = false;   // showing a kept lick, not today's
+    bool openKept_ = false;   // open the list next frame (its key was pressed)
+    std::string shownDate_;   // the day the shown lick is from
+    std::vector<Kept> favourites_, done_, history_;
     bool whole_ = false;  // the whole solo, not just the lick
     int speed_ = 100;     // percent, now; the ramp changes it
     int loopsSeen_ = 0;

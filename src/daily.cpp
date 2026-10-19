@@ -96,6 +96,58 @@ size_t Daily::Files() const {
     return files_.size();
 }
 
+std::optional<Found> Daily::Open(const SavedLick& lick) {
+    auto score = load(lick.path);
+    std::lock_guard<std::mutex> lock(mu_);
+    message_.clear();
+    if (!score || lick.track >= int(score->tracks.size()) || lick.startBar + lick.bars > int(score->masterBars.size()) ||
+        lick.soloEnd > int(score->masterBars.size())) {
+        message_ = "Can't read " + std::filesystem::u8path(lick.path).filename().u8string() + " any more.";
+        return std::nullopt;
+    }
+    return Found{lick, score};
+}
+
+std::vector<Kept> Daily::History() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    std::vector<Kept> out;
+    for (auto it = state_.days.rbegin(); it != state_.days.rend(); ++it)
+        if (it->second.lick) out.push_back({*it->second.lick, it->first});
+    return out;
+}
+
+std::vector<Kept> Daily::Favourites() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return state_.favourites;
+}
+
+std::vector<Kept> Daily::Done() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return state_.done;
+}
+
+bool Daily::ToggleFavourite(const SavedLick& lick, const std::string& date) {
+    std::lock_guard<std::mutex> lock(mu_);
+    auto& fs = state_.favourites;
+    auto it = std::find_if(fs.begin(), fs.end(), [&](const Kept& k) { return SameLick(k.lick, lick); });
+    bool on = it == fs.end();
+    if (on) fs.push_back({lick, date});
+    else fs.erase(it);
+    SaveState(dir_, state_);
+    return on;
+}
+
+bool Daily::ToggleDone(const SavedLick& lick, const std::string& date) {
+    std::lock_guard<std::mutex> lock(mu_);
+    auto& ds = state_.done;
+    auto it = std::find_if(ds.begin(), ds.end(), [&](const Kept& k) { return SameSolo(k.lick, lick); });
+    bool on = it == ds.end();
+    if (on) ds.push_back({lick, date});
+    else ds.erase(it);
+    SaveState(dir_, state_);
+    return on;
+}
+
 void Daily::Skip(const std::string& date) {
     std::lock_guard<std::mutex> lock(mu_);
     Day& day = state_.days[date];
@@ -129,6 +181,8 @@ std::optional<Found> Daily::Find(const std::string& date, const std::function<vo
         message_ = "No Guitar Pro files found. Add folders to config.json.";
         return std::nullopt;
     }
+    std::map<std::string, std::vector<std::pair<int, int>>> done;
+    for (const auto& c : candidates) done[c.path] = DoneBars(state_, c.path);
     lock.unlock();
     std::vector<std::string> noSolo;
     std::optional<Found> found;
@@ -136,9 +190,11 @@ std::optional<Found> Daily::Find(const std::string& date, const std::function<vo
         if (progress) progress(std::filesystem::u8path(c.path).filename().u8string());
         auto score = load(c.path);
         std::optional<Lick> l;
-        if (score) l = FindLick(*score, seed);
+        const auto& skip = done[c.path];
+        if (score) l = FindLick(*score, seed, skip);
         if (!l) {
-            noSolo.push_back(c.Key());
+            // Only remember it has no solo if that's so with none done.
+            if (!score || skip.empty() || !FindLick(*score, seed)) noSolo.push_back(c.Key());
             continue;
         }
         const Track& t = score->tracks[size_t(l->track)];

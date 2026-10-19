@@ -7,6 +7,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace dl {
@@ -51,6 +52,18 @@ struct SavedLick {
     double secs = 0;
 };
 
+// SameLick: the same lick of the same file.
+bool SameLick(const SavedLick& a, const SavedLick& b);
+// SameSolo: licks from the same solo of the same song (any version).
+bool SameSolo(const SavedLick& a, const SavedLick& b);
+
+// A lick kept for later: a favourite, or a solo marked done. date is the
+// day it was kept.
+struct Kept {
+    SavedLick lick;
+    std::string date;
+};
+
 struct Day {
     std::optional<SavedLick> lick;
     std::vector<std::string> skipped;  // paths
@@ -79,7 +92,15 @@ struct Config {
 struct State {
     std::map<std::string, Day> days;  // by date, YYYY-MM-DD
     std::set<std::string> noSolo;     // TabFile keys
+    std::vector<Kept> favourites;     // oldest first
+    // Solos marked done: they never come round again, in this file or
+    // another version of the song.
+    std::vector<Kept> done;
 };
+
+// DoneBars lists the bars [start, end) of path's song's solos marked
+// done, to leave out when choosing a lick from it.
+std::vector<std::pair<int, int>> DoneBars(const State& s, const std::string& path);
 
 // Load and save the files in dir; missing files give defaults.
 Config LoadConfig(const std::string& dir, const std::vector<std::string>& defaultFolders);

@@ -170,6 +170,53 @@ std::vector<TabFile> Candidates(const std::vector<TabFile>& files, const std::st
 
 // --- config and state ---
 
+namespace {
+
+SavedLick lickFromJson(const json& l) {
+    SavedLick sl;
+    sl.path = l.value("path", "");
+    sl.title = l.value("title", "");
+    sl.artist = l.value("artist", "");
+    sl.trackName = l.value("trackName", "");
+    sl.section = l.value("section", "");
+    sl.tuning = l.value("tuning", "");
+    sl.track = l.value("track", 0);
+    sl.startBar = l.value("startBar", 0);
+    sl.bars = l.value("bars", 0);
+    sl.notes = l.value("notes", 0);
+    sl.soloStart = l.value("soloStart", 0);
+    sl.soloEnd = l.value("soloEnd", 0);
+    sl.tempo = l.value("tempo", 0);
+    sl.secs = l.value("secs", 0.0);
+    return sl;
+}
+
+json lickToJson(const SavedLick& l) {
+    return {{"path", l.path},           {"title", l.title},         {"artist", l.artist},
+            {"trackName", l.trackName}, {"section", l.section},     {"tuning", l.tuning},
+            {"track", l.track},         {"startBar", l.startBar},   {"bars", l.bars},
+            {"notes", l.notes},         {"soloStart", l.soloStart}, {"soloEnd", l.soloEnd},
+            {"tempo", l.tempo},         {"secs", l.secs}};
+}
+
+}  // namespace
+
+bool SameLick(const SavedLick& a, const SavedLick& b) {
+    return a.path == b.path && a.track == b.track && a.startBar == b.startBar && a.bars == b.bars;
+}
+
+bool SameSolo(const SavedLick& a, const SavedLick& b) {
+    return (a.path == b.path || SongKey(a.path) == SongKey(b.path)) && a.soloStart < b.soloEnd && b.soloStart < a.soloEnd;
+}
+
+std::vector<std::pair<int, int>> DoneBars(const State& s, const std::string& path) {
+    std::vector<std::pair<int, int>> out;
+    const std::string song = SongKey(path);
+    for (const auto& k : s.done)
+        if (k.lick.path == path || SongKey(k.lick.path) == song) out.push_back({k.lick.soloStart, k.lick.soloEnd});
+    return out;
+}
+
 Config LoadConfig(const std::string& dir, const std::vector<std::string>& defaultFolders) {
     Config c;
     c.folders = defaultFolders;
@@ -231,28 +278,22 @@ State LoadState(const std::string& dir) {
             for (auto& [date, d] : j["days"].items()) {
                 Day day;
                 if (d.contains("lick") && d["lick"].is_object()) {
-                    auto& l = d["lick"];
-                    SavedLick sl;
-                    sl.path = l.value("path", "");
-                    sl.title = l.value("title", "");
-                    sl.artist = l.value("artist", "");
-                    sl.trackName = l.value("trackName", "");
-                    sl.section = l.value("section", "");
-                    sl.tuning = l.value("tuning", "");
-                    sl.track = l.value("track", 0);
-                    sl.startBar = l.value("startBar", 0);
-                    sl.bars = l.value("bars", 0);
-                    sl.notes = l.value("notes", 0);
-                    sl.soloStart = l.value("soloStart", 0);
-                    sl.soloEnd = l.value("soloEnd", 0);
-                    sl.tempo = l.value("tempo", 0);
-                    sl.secs = l.value("secs", 0.0);
+                    SavedLick sl = lickFromJson(d["lick"]);
                     if (!sl.path.empty() && sl.bars > 0) day.lick = sl;
                 }
                 if (d.contains("skipped")) d["skipped"].get_to(day.skipped);
                 s.days[date] = std::move(day);
             }
         if (j.contains("noSolo")) j["noSolo"].get_to(s.noSolo);
+        for (const char* key : {"favourites", "done"}) {
+            if (!j.contains(key) || !j[key].is_array()) continue;
+            auto& list = std::string(key) == "done" ? s.done : s.favourites;
+            for (auto& e : j[key]) {
+                if (!e.is_object() || !e.contains("lick")) continue;
+                Kept k{lickFromJson(e["lick"]), e.value("date", "")};
+                if (!k.lick.path.empty() && k.lick.bars > 0) list.push_back(std::move(k));
+            }
+        }
     } catch (const std::exception&) {
     }
     return s;
@@ -262,18 +303,16 @@ bool SaveState(const std::string& dir, const State& s) {
     json days = json::object();
     for (const auto& [date, d] : s.days) {
         json jd = json::object();
-        if (d.lick) {
-            const auto& l = *d.lick;
-            jd["lick"] = {{"path", l.path},           {"title", l.title},         {"artist", l.artist},
-                          {"trackName", l.trackName}, {"section", l.section},     {"tuning", l.tuning},
-                          {"track", l.track},         {"startBar", l.startBar},   {"bars", l.bars},
-                          {"notes", l.notes},         {"soloStart", l.soloStart}, {"soloEnd", l.soloEnd},
-                          {"tempo", l.tempo},         {"secs", l.secs}};
-        }
+        if (d.lick) jd["lick"] = lickToJson(*d.lick);
         if (!d.skipped.empty()) jd["skipped"] = d.skipped;
         days[date] = jd;
     }
-    json j = {{"days", days}, {"noSolo", s.noSolo}};
+    auto kept = [](const std::vector<Kept>& list) {
+        json a = json::array();
+        for (const auto& k : list) a.push_back({{"date", k.date}, {"lick", lickToJson(k.lick)}});
+        return a;
+    };
+    json j = {{"days", days}, {"noSolo", s.noSolo}, {"favourites", kept(s.favourites)}, {"done", kept(s.done)}};
     return writeAtomically(toPath(dir) / "state.json", j.dump(1));
 }
 

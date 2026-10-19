@@ -35,6 +35,10 @@ const char* Pause = "\xEE\x9D\xA9";     // U+E769
 const char* Minimise = "\xEE\xA4\xA1";  // U+E921
 const char* Close = "\xEE\xA2\xBB";     // U+E8BB
 const char* Restart = "\xEE\x9C\xAC";   // U+E72C
+const char* Star = "\xEE\x9C\xB4";      // U+E734
+const char* StarFill = "\xEE\x9C\xB5";  // U+E735
+const char* Check = "\xEE\x9C\xBE";     // U+E73E
+const char* History = "\xEE\xA0\x9C";   // U+E81C
 }  // namespace icon
 
 std::string known(REFKNOWNFOLDERID id) {
@@ -104,6 +108,7 @@ App::App(HWND hwnd, std::function<void()> wake) : hwnd_(hwnd), wake_(std::move(w
         if (playerError_.empty()) playerError_ = "the soundfont is missing";
     }
     date_ = today();
+    refreshKept();
     startFind(false);
 }
 
@@ -121,17 +126,35 @@ std::string App::today() const {
 
 void App::startFind(bool skip) {
     if (searching_) return;
+    std::string date = date_;
+    browsing_ = false;
+    startJob(
+        [this, date, skip] {
+            if (skip) daily_->Skip(date);
+            return daily_->Find(date, [this](const std::string& name) {
+                std::lock_guard<std::mutex> lock(mu_);
+                progress_ = name;
+                wake_();
+            });
+        },
+        false);
+}
+
+void App::startOpen(const SavedLick& lick, const std::string& date) {
+    if (searching_) return;
+    shownDate_ = date;
+    startJob([this, lick] { return daily_->Open(lick); }, true);
+}
+
+void App::startJob(std::function<std::optional<Found>()> job, bool open) {
+    if (searching_) return;
     if (worker_.joinable()) worker_.join();
     searching_ = true;
+    opening_ = open;
+    notice_.clear();
     player_.Stop();
-    std::string date = date_;
-    worker_ = std::thread([this, date, skip] {
-        if (skip) daily_->Skip(date);
-        auto f = daily_->Find(date, [this](const std::string& name) {
-            std::lock_guard<std::mutex> lock(mu_);
-            progress_ = name;
-            wake_();
-        });
+    worker_ = std::thread([this, job = std::move(job)] {
+        auto f = job();
         {
             std::lock_guard<std::mutex> lock(mu_);
             pending_ = std::move(f);
@@ -158,7 +181,15 @@ void App::Pump() {
     if (done) {
         if (f) {
             message_.clear();
+            // Today's lick opened from the list is just today's again.
+            bool todays = false;
+            for (const auto& h : history_) todays |= h.date == date_ && SameLick(h.lick, f->lick);
+            browsing_ = opening_ && !todays;
+            if (!browsing_) shownDate_ = date_;
             show(std::move(*f));
+            refreshKept();
+        } else if (opening_) {
+            notice_ = daily_->Message();  // keep what's shown
         } else {
             lick_.reset();
             message_ = daily_->Message();
@@ -205,6 +236,35 @@ void App::loadSequence() {
     applySpeed();
     loopsSeen_ = 0;
     upToSpeed_ = false;
+}
+
+void App::refreshKept() {
+    favourites_ = daily_->Favourites();
+    done_ = daily_->Done();
+    history_ = daily_->History();
+}
+
+bool App::isFavourite(const SavedLick& l) const {
+    for (const auto& k : favourites_)
+        if (SameLick(k.lick, l)) return true;
+    return false;
+}
+
+bool App::isDone(const SavedLick& l) const {
+    for (const auto& k : done_)
+        if (SameSolo(k.lick, l)) return true;
+    return false;
+}
+
+void App::toggleFavourite(const SavedLick& l) {
+    daily_->ToggleFavourite(l, date_);
+    refreshKept();
+}
+
+void App::toggleDone(const SavedLick& l) {
+    bool on = daily_->ToggleDone(l, date_);
+    refreshKept();
+    notice_ = on ? "Solo done: it won't come round again" : "";
 }
 
 void App::applySpeed() { player_.SetSpeed(speed_ / 100.0); }
@@ -432,6 +492,8 @@ void App::Frame() {
             loadSequence();
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) restartRamp();
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false) && lick_) toggleFavourite(lick_->lick);
+        if (ImGui::IsKeyPressed(ImGuiKey_H, false)) openKept_ = true;
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) changePitch(1);
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) changePitch(-1);
         int delta = ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -5 : ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 5 : 0;
@@ -475,18 +537,18 @@ void App::drawInfo(float width, float height) {
     ImGui::PopFont();
     ImGui::SameLine(0, 8 * k);
     ImGui::PushFont(small_);
-    ImGui::TextColored(p.muted, "%s", formatDate(date_).c_str());
+    ImGui::TextColored(p.muted, "%s", formatDate(browsing_ ? shownDate_ : date_).c_str());
     ImGui::PopFont();
     {
         float bw = 26 * k, bh = 20 * k;
-        ImVec2 start(panelMax_.x - 8 * k - 2 * bw, panelMin_.y + 6 * k);
-        const char* icons[2] = {icon::Minimise, icon::Close};
-        for (int i = 0; i < 2; i++) {
+        ImVec2 start(panelMax_.x - 8 * k - 3 * bw, panelMin_.y + 6 * k);
+        const char* icons[3] = {icon::History, icon::Minimise, icon::Close};
+        for (int i = 0; i < 3; i++) {
             ImGui::SetCursorScreenPos(ImVec2(start.x + i * bw, start.y));
             ImGui::PushID(i);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, i == 1 ? hex(0xC42B1C) : p.hover);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, i == 1 ? hex(0xC42B1C) : p.hover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, i == 2 ? hex(0xC42B1C) : p.hover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, i == 2 ? hex(0xC42B1C) : p.hover);
             ImGui::PushStyleColor(ImGuiCol_Text, p.muted);
             ImGui::PushFont(small_);
             bool pressed = ImGui::Button(icons[i], ImVec2(bw, bh));
@@ -494,7 +556,9 @@ void App::drawInfo(float width, float height) {
             ImGui::PopStyleColor(4);
             ImGui::PopID();
             hot_.push_back({ImGui::GetItemRectMin(), ImGui::GetItemRectMax()});
-            if (pressed) PostMessageW(hwnd_, i == 0 ? WM_SYSCOMMAND : WM_CLOSE, i == 0 ? SC_MINIMIZE : 0, 0);
+            if (i == 0 && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Favourites and history (H)");
+            if (pressed && i == 0) openKept_ = true;
+            else if (pressed) PostMessageW(hwnd_, i == 1 ? WM_SYSCOMMAND : WM_CLOSE, i == 1 ? SC_MINIMIZE : 0, 0);
         }
         ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, panelMin_.y + 10 * k + ImGui::GetTextLineHeightWithSpacing()));
     }
@@ -502,10 +566,30 @@ void App::drawInfo(float width, float height) {
     // The song and where the lick is in it.
     if (lick_) {
         const auto& l = lick_->lick;
+        // The title, with a star to keep it and a tick for a solo done.
+        ImGui::PushFont(small_);
+        const float iconW = ImGui::CalcTextSize(icon::StarFill).x + 12 * k;
+        ImGui::PopFont();
+        const float marksW = 2 * iconW + 2 * k;
         ImGui::PushFont(title_);
-        std::string t = fit(l.title, title_, title_->FontSize, inner);
+        const ImVec2 titlePos = ImGui::GetCursorScreenPos();
+        std::string t = fit(l.title, title_, title_->FontSize, inner - marksW - 6 * k);
         ImGui::TextUnformatted(t.c_str());
         ImGui::PopFont();
+        const ImVec2 below = ImGui::GetCursorScreenPos();
+        {
+            const bool fav = isFavourite(l), done = isDone(l);
+            ImGui::PushFont(small_);
+            float y = titlePos.y + (title_->FontSize - small_->FontSize) / 2 - 2 * k;
+            ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k + inner - marksW, y));
+            if (link(fav ? icon::StarFill : icon::Star, fav, fav ? "A favourite: click to take it off (F)" : "Keep as a favourite (F)"))
+                toggleFavourite(l);
+            ImGui::SameLine(0, 2 * k);
+            if (link(icon::Check, done, done ? "Done: this solo won't come round again. Click to undo" : "Mark this solo done, so it never comes round again"))
+                toggleDone(l);
+            ImGui::PopFont();
+            ImGui::SetCursorScreenPos(below);
+        }
         if (!l.artist.empty()) {
             ImGui::PushFont(small_);
             ImGui::TextColored(p.muted, "%s", fit(l.artist, small_, small_->FontSize, inner).c_str());
@@ -674,6 +758,8 @@ void App::drawInfo(float width, float height) {
     } else if (searching_) {
         std::lock_guard<std::mutex> lock(mu_);
         status = progress_.empty() ? "Looking through the tabs\xE2\x80\xA6" : "Trying " + progress_ + "\xE2\x80\xA6";
+    } else if (!notice_.empty() && !player_.Playing()) {
+        status = notice_;
     } else if (!lick_) {
         status = message_;
     } else {
@@ -692,7 +778,7 @@ void App::drawInfo(float width, float height) {
         }
     }
     const char* wholeLabel = "Whole solo";
-    const char* anotherLabel = "Another";
+    const char* anotherLabel = browsing_ ? "Today" : "Another";
     const char* openLabel = "Open";
     const float linkPad = 6 * k, linkGap = 2 * k;
     float linksW = 0;
@@ -715,7 +801,7 @@ void App::drawInfo(float width, float height) {
     ImGui::EndDisabled();
     ImGui::BeginDisabled(searching_);
     place(anotherLabel);
-    if (link(anotherLabel, false, "A different lick for today")) startFind(true);
+    if (link(anotherLabel, false, browsing_ ? "Back to today's lick" : "A different lick for today")) startFind(!browsing_);
     ImGui::EndDisabled();
     ImGui::BeginDisabled(!lick_);
     place(openLabel);
@@ -726,10 +812,108 @@ void App::drawInfo(float width, float height) {
     ImGui::EndDisabled();
     ImGui::PopFont();
     (void)dl;
+    drawKept();
 
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
+}
+
+void App::drawKept() {
+    const Palette& p = *pal;
+    const float k = scale_;
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    if (openKept_) {
+        openKept_ = false;
+        refreshKept();
+        ImGui::OpenPopup("kept");
+    }
+    ImGui::SetNextWindowPos(ImVec2(6 * k, 6 * k));
+    ImGui::SetNextWindowSize(ImVec2(std::min(640 * k, display.x - 12 * k), display.y - 12 * k));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10 * k, 8 * k));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4 * k, 2 * k));
+    ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_TabHovered, p.hover);
+    ImGui::PushStyleColor(ImGuiCol_TabSelected, p.frame);
+    ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, p.accent);
+    ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected, p.frame);
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(p.accent.x, p.accent.y, p.accent.z, 0.15f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, p.hover);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, p.hover);
+    if (ImGui::BeginPopup("kept")) {
+        hot_.push_back({ImGui::GetWindowPos(), ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                      ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)});
+        ImGui::PushFont(small_);
+        // One row: star, tick, then the lick, which opens it.
+        auto row = [&](const Kept& kept, int i) {
+            const SavedLick& l = kept.lick;
+            ImGui::PushID(i);
+            const bool fav = isFavourite(l), done = isDone(l);
+            if (link(fav ? icon::StarFill : icon::Star, fav, fav ? "Take it off the favourites" : "Keep as a favourite"))
+                toggleFavourite(l);
+            ImGui::SameLine(0, 0);
+            if (link(icon::Check, done, done ? "Done: click to undo" : "Mark this solo done")) toggleDone(l);
+            ImGui::SameLine(0, 6 * k);
+            const bool current = lick_ && SameLick(lick_->lick, l);
+            std::string bars = l.bars == 1 ? "bar " + std::to_string(l.startBar + 1)
+                                           : "bars " + std::to_string(l.startBar + 1) + "\xE2\x80\x93" + std::to_string(l.startBar + l.bars);
+            std::string date = formatDate(kept.date);
+            std::string what = l.title + (l.artist.empty() ? "" : "  \xC2\xB7  " + l.artist);
+            const float x0 = ImGui::GetCursorScreenPos().x, w = ImGui::GetContentRegionAvail().x;
+            const float dateW = 78 * k, barsW = ImGui::CalcTextSize("bars 888\xE2\x80\x93" "888").x + 8 * k;
+            const float y = ImGui::GetCursorScreenPos().y;
+            const float h = ImGui::GetFrameHeight() - 2 * k;
+            ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0, 0.5f));
+            bool open = ImGui::Selectable("##open", current, ImGuiSelectableFlags_None, ImVec2(w, h));
+            ImGui::PopStyleVar();
+            hot_.push_back({ImGui::GetItemRectMin(), ImGui::GetItemRectMax()});
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("%s", l.path.c_str());
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const float ty = y + (h - small_->FontSize) / 2;
+            dl->AddText(ImVec2(x0 + 4 * k, ty), col(p.muted), date.c_str());
+            std::string wt = fit(what, small_, small_->FontSize, w - dateW - barsW - 8 * k);
+            dl->AddText(ImVec2(x0 + dateW, ty), col(done ? p.muted : p.text), wt.c_str());
+            dl->AddText(ImVec2(x0 + w - barsW + 4 * k, ty), col(p.muted), bars.c_str());
+            if (open && !current) {
+                startOpen(l, kept.date);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        };
+        auto list = [&](const std::vector<Kept>& items, const char* empty, bool newestFirst) {
+            ImGui::BeginChild("list", ImVec2(0, 0), ImGuiChildFlags_None);
+            if (items.empty()) {
+                ImGui::Dummy(ImVec2(0, 4 * k));
+                ImGui::TextColored(p.muted, "%s", empty);
+            }
+            // A copy: a toggle in a row changes the lists under us.
+            std::vector<Kept> copy = items;
+            for (int i = 0; i < int(copy.size()); i++) row(copy[size_t(newestFirst ? copy.size() - 1 - size_t(i) : size_t(i))], i);
+            ImGui::EndChild();
+        };
+        if (ImGui::BeginTabBar("tabs")) {
+            std::string favs = "Favourites (" + std::to_string(favourites_.size()) + ")###favourites";
+            std::string dones = "Done (" + std::to_string(done_.size()) + ")###done";
+            if (ImGui::BeginTabItem(favs.c_str())) {
+                list(favourites_, "No favourites yet: star a lick to keep it here.", true);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("History")) {
+                list(history_, "No licks yet.", false);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(dones.c_str())) {
+                list(done_, "No solos done yet: tick one off and it won't come round again.", true);
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+        ImGui::PopFont();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor(8);
+    ImGui::PopStyleVar(2);
 }
 
 void App::drawTab(float width, float height) {

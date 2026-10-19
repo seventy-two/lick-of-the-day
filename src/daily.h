@@ -33,6 +33,19 @@ public:
     // Skip drops date's lick, so the next Find chooses another.
     void Skip(const std::string& date);
 
+    // Open loads a lick kept from before (a favourite, or a past day's).
+    // Empty if its file no longer reads; Message says why.
+    std::optional<Found> Open(const SavedLick& lick);
+
+    // History is each day's lick, newest first, with its date.
+    std::vector<Kept> History() const;
+    std::vector<Kept> Favourites() const;
+    std::vector<Kept> Done() const;
+    // Each toggle adds the lick (kept on date) or takes it off, and says
+    // which. Done goes by the solo: any lick of it counts.
+    bool ToggleFavourite(const SavedLick& lick, const std::string& date);
+    bool ToggleDone(const SavedLick& lick, const std::string& date);
+
     std::string Message() const;
     size_t Files() const;
 

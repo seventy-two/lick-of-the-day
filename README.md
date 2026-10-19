@@ -40,6 +40,12 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   (versions of one song count once), leaving out songs used in the last
   120 days. The day's lick is saved, so it's the same all day. **Another**
   skips to a different one.
+- **Favourites and done**: the ☆ by the title keeps the lick as a
+  favourite; the ✓ marks its solo done, so it never comes round as a lick
+  of the day again (in that file or another version of the song; other
+  solos in the song still can). The history button at the top opens
+  Favourites, History (each day's lick) and Done: click one to play it
+  (**Today** goes back), or star, tick and untick from there.
 - **Plays it** through a General MIDI soundfont (Sonivox, built in) with
   [TinySoundFont](https://github.com/schellingb/TinySoundFont) and
   [miniaudio](https://miniaud.io): bends, slides and vibrato as pitch-wheel
@@ -69,7 +75,8 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   rests). The notes being played light up.
 
 Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
-← → speed, ↑ ↓ pitch, M click, B band, S whole solo.
+← → speed, ↑ ↓ pitch, M click, B band, S whole solo, F favourite,
+H favourites and history.
 
 ## Files
 
@@ -79,8 +86,9 @@ Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
   and Downloads at first), `ramp` (`start`, `step`, `end`, in percent),
   `repeatDays`, the player's switches, `tuneTo` (the guitar's top string
   as a MIDI note, 0 for as written), and the window's place.
-- `state.json`: each day's lick and what was skipped, and the files found
-  to have no solo (not read again until they change).
+- `state.json`: each day's lick and what was skipped, the favourites and
+  solos done, and the files found to have no solo (not read again until
+  they change).
 
 ## Building and testing
 
