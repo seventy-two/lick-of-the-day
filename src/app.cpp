@@ -526,7 +526,8 @@ void App::drawInfo(float width, float height) {
 
     // Above them, the pitch and the ramp's settings.
     {
-        ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, panelMax_.y - 10 * k - 2 * rowH - 6 * k - small_->FontSize - 12 * k));
+        const float pitchY = panelMax_.y - 10 * k - 2 * rowH - 6 * k - small_->FontSize - 12 * k;
+        ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, pitchY));
         ImGui::BeginDisabled(!lick_);
         ImGui::PushFont(small_);
         ImGui::AlignTextToFramePadding();
@@ -565,7 +566,8 @@ void App::drawInfo(float width, float height) {
         std::snprintf(rl, sizeof(rl), "Ramp %d\xE2\x86\x92%d%%, +%d", cfg_.ramp.start, cfg_.ramp.end, cfg_.ramp.step);
         ImGui::PushFont(small_);
         float rw = ImGui::CalcTextSize(rl).x + 12 * k;
-        ImGui::SameLine(14 * k + inner - rw);
+        // Its text level with the row's: a link's text sits 2px into it.
+        ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k + inner - rw, pitchY + ImGui::GetStyle().FramePadding.y - 2 * k));
         if (link(rl, false, "Change how the ramp goes")) ImGui::OpenPopup("ramp");
         ImGui::PopFont();
         ImGui::SetNextWindowPos(ImVec2(panelMax_.x - 8 * k, panelMin_.y + 8 * k), ImGuiCond_Appearing, ImVec2(1, 0));
@@ -636,8 +638,9 @@ void App::drawInfo(float width, float height) {
     ImGui::SameLine();
     if (button("Band", cfg_.band, false, "Play the other parts too (B)")) toggle(cfg_.band);
 
-    // Status, and the less used things.
-    ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, panelMax_.y - 10 * k - small_->FontSize - 4 * k));
+    // Status, and the less used things, on one line: the links on the
+    // right, their text level with the status's.
+    const float lineY = panelMax_.y - 10 * k - small_->FontSize - 4 * k;
     ImGui::PushFont(small_);
     std::string status;
     if (!playerError_.empty()) {
@@ -662,37 +665,39 @@ void App::drawInfo(float width, float height) {
             status = buf;
         }
     }
-    // The links go on the right; the status gets what's left.
     const char* wholeLabel = "Whole solo";
     const char* anotherLabel = "Another";
     const char* openLabel = "Open";
+    const float linkPad = 6 * k, linkGap = 2 * k;
     float linksW = 0;
-    for (const char* s : {wholeLabel, anotherLabel, openLabel}) linksW += ImGui::CalcTextSize(s).x + 12 * k + 2 * k;
-    float y = ImGui::GetCursorPosY();
-    ImGui::AlignTextToFramePadding();
+    for (const char* s : {wholeLabel, anotherLabel, openLabel}) linksW += ImGui::CalcTextSize(s).x + 2 * linkPad + linkGap;
+    ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, lineY));
     ImGui::TextColored(p.muted, "%s", fit(status, small_, small_->FontSize, inner - linksW - 8 * k).c_str());
-    ImGui::SameLine(14 * k + inner - linksW);
-    ImGui::SetCursorPosY(y - 2 * k);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2 * k, 0));
+    // Laid out from the right edge, the same edge as the ramp's link.
+    float x = panelMin_.x + 14 * k + inner - linksW + linkGap;
+    auto place = [&](const char* label) {
+        ImGui::SetCursorScreenPos(ImVec2(x, lineY - 2 * k));  // a link's text sits 2px into it
+        x += ImGui::CalcTextSize(label).x + 2 * linkPad + linkGap;
+    };
     ImGui::BeginDisabled(!lick_);
+    place(wholeLabel);
     if (link(wholeLabel, whole_, "Show and play the whole solo (S)")) {
         whole_ = !whole_;
         tabScroll_ = 0;
         loadSequence();
     }
-    ImGui::SameLine();
     ImGui::EndDisabled();
     ImGui::BeginDisabled(searching_);
+    place(anotherLabel);
     if (link(anotherLabel, false, "A different lick for today")) startFind(true);
     ImGui::EndDisabled();
-    ImGui::SameLine();
     ImGui::BeginDisabled(!lick_);
+    place(openLabel);
     if (link(openLabel, false, "Open the tab in Guitar Pro or TuxGuitar") && lick_) {
         std::wstring w = std::filesystem::u8path(lick_->lick.path).wstring();
         ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
     ImGui::EndDisabled();
-    ImGui::PopStyleVar();
     ImGui::PopFont();
     (void)dl;
 
