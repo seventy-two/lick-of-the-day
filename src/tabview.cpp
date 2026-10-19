@@ -18,21 +18,25 @@ struct BarLayout {
     int index = 0;
     float x = 0, width = 0;
     float notesX = 0;  // after the bar's left padding and any time signature
+    float endX = 0;    // where the bar's end leads: the next bar's first onset
+    int duration = 0;  // ticks
     bool timeSig = false;
     std::vector<int> onsets;
     std::vector<float> onsetX, onsetW;
 
     float XAt(int rel) const {
         // The x of a tick within the bar: onsets' centres, in between
-        // linearly.
+        // linearly, and on from the last towards the next bar's first, so
+        // the cursor keeps moving through a bar's last note.
         if (onsets.empty()) return notesX;
         for (size_t i = 0; i < onsets.size(); i++) {
-            int next = i + 1 < onsets.size() ? onsets[i + 1] : -1;
-            if (next < 0 || rel < next) {
-                float x0 = onsetX[i];
-                if (next < 0) return x0;
+            bool lastOne = i + 1 == onsets.size();
+            int next = lastOne ? duration : onsets[i + 1];
+            if (lastOne || rel < next) {
+                float x0 = onsetX[i], x1 = lastOne ? endX : onsetX[i + 1];
+                if (next <= onsets[i]) return x0;
                 float t = float(rel - onsets[i]) / float(next - onsets[i]);
-                return x0 + std::clamp(t, 0.0f, 1.0f) * (onsetX[i + 1] - x0);
+                return x0 + std::clamp(t, 0.0f, 1.0f) * (x1 - x0);
             }
         }
         return onsetX.back();
@@ -100,6 +104,7 @@ TabResult DrawTab(ImDrawList* dl, ImVec2 origin, ImVec2 size, const Score& score
         const auto& mb = score.masterBars[size_t(b)];
         BarLayout L;
         L.index = b;
+        L.duration = mb.Duration();
         std::set<int> on;
         for (const auto& v : staff.bars[size_t(b)].voices)
             for (const auto& beat : v.beats)
@@ -137,6 +142,8 @@ TabResult DrawTab(ImDrawList* dl, ImVec2 origin, ImVec2 size, const Score& score
     }
     const float right = x;
     res.width = right - origin.x;
+    for (size_t i = 0; i < bars.size(); i++)
+        bars[i].endX = i + 1 < bars.size() ? bars[i + 1].XAt(0) : right - padR * stretch * 0.5f;
 
     // --- vertical layout ---
     const float topLane = 30 * k, bottomLane = 30 * k;
