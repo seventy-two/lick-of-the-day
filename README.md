@@ -1,7 +1,7 @@
-# dailylick
+# Lick of the Day
 
-A small Windows app with a guitar lick to learn each day: a bar or two of
-a solo, picked from the Guitar Pro files on disk, with its tab and a
+A small Windows app with a guitar lick to learn each day: a phrase of a
+solo, picked from the Guitar Pro files on disk, with its tab and a
 player to loop it, slow it down, and speed it up a step each time round.
 
 It's written in C++ with Win32, Direct3D 11 and

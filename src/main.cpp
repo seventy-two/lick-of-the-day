@@ -218,13 +218,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
     int w = int(1600 * scale), h = int(220 * scale);
     int x = (mi.rcWork.left + mi.rcWork.right - w) / 2, y = mi.rcWork.bottom - h - int(16 * scale);
-    hwnd = CreateWindowExW(0, kClassName, L"dailylick", WS_OVERLAPPEDWINDOW, x, y, w, h, nullptr, nullptr, instance,
+    hwnd = CreateWindowExW(0, kClassName, L"Lick of the Day", WS_OVERLAPPEDWINDOW, x, y, w, h, nullptr, nullptr, instance,
                            nullptr);
     MARGINS margins{0, 0, 0, 1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     if (!createDevice()) {
-        MessageBoxW(nullptr, L"Couldn't start Direct3D 11.", L"dailylick", MB_ICONERROR);
+        MessageBoxW(nullptr, L"Couldn't start Direct3D 11.", L"Lick of the Day", MB_ICONERROR);
         return 1;
     }
 

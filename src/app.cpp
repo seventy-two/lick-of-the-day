@@ -458,7 +458,7 @@ void App::drawInfo(float width, float height) {
 
     // The top line: what this is, the date, and the window's buttons.
     ImGui::PushFont(label_);
-    ImGui::TextColored(p.accent, "DAILY LICK");
+    ImGui::TextColored(p.accent, "LICK OF THE DAY");
     ImGui::PopFont();
     ImGui::SameLine(0, 8 * k);
     ImGui::PushFont(small_);
