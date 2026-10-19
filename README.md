@@ -79,6 +79,9 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   tremolo picking, and rhythm below (stems, beams, flags, dots, tuplets,
   rests). The notes being played light up.
 
+Pausing and playing again starts the lick from the top (the ramp carries
+on where it was).
+
 Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
 ← → speed, ↑ ↓ pitch, M click, B band, S whole solo, F favourite,
 H favourites and history, P tuck the panel away or bring it back.

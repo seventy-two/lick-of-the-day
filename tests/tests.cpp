@@ -471,6 +471,12 @@ void testPlayer() {
     CHECK_EQ(p.Loops(), 2);
     CHECK(peak > 0.01f && peak < 1.0f);
     CHECK(p.Playing());
+    // Rewinding goes back to the top but keeps the count of loops.
+    p.Pause();
+    p.Rewind();
+    CHECK_EQ(p.Position(), 0.0);
+    CHECK_EQ(p.Loops(), 2);
+    p.Play();
     p.SetLoop(false);
     for (int i = 0; i < 44100 * 3 / 1024; i++) p.Render(buf.data(), 1024);
     CHECK(!p.Playing());

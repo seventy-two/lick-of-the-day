@@ -33,6 +33,9 @@ public:
     void Play();
     void Pause();
     void Stop();  // and back to the start
+    // Rewind goes back to the top (with the count-in, if the click's on)
+    // but keeps counting the loops, so a ramp carries on.
+    void Rewind();
     bool Playing() const { return playing_; }
 
     void SetSpeed(double s);  // 1 is the tab's tempo

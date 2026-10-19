@@ -326,7 +326,9 @@ void App::playPause() {
         player_.Pause();
         return;
     }
-    if (player_.Position() == 0 && player_.Loops() == 0) {
+    // Paused partway: carry on from the top, not mid-phrase.
+    if (player_.Position() != 0 || player_.Loops() > 0) player_.Rewind();
+    if (player_.Position() <= 0 && player_.Loops() == 0) {
         // From the top: the ramp starts again.
         loopsSeen_ = 0;
         upToSpeed_ = false;

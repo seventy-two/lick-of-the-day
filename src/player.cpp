@@ -111,6 +111,13 @@ void Player::Stop() {
     loops_ = 0;
 }
 
+void Player::Rewind() {
+    std::lock_guard<std::mutex> lock(mu_);
+    silence();
+    next_ = nextClick_ = nextCount_ = 0;
+    pos_ = click_ && !seq_.countIn.empty() ? seq_.countIn.front().time : 0.0;
+}
+
 void Player::SetSpeed(double s) {
     std::lock_guard<std::mutex> lock(mu_);
     speed_ = std::clamp(s, 0.1, 2.0);
