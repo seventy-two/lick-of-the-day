@@ -28,6 +28,7 @@ struct Solo {
     double mean = 0, score = 0;
     bool labelled = false;
     std::vector<double> raw;  // each bar's score
+    double before = 0;        // the score of the bar before it
 };
 
 struct Lick {
@@ -57,10 +58,10 @@ double TempoAt(const Score& score, int i);
 // four, or eight short bars, or two long ones.
 int PhraseBars(const MasterBar& m);
 
-// PhraseStarts lists the bars in [from, to) where a phrase begins, counting
-// in phrases from the top or the last section marker, repeat or change of
-// time signature.
-std::vector<int> PhraseStarts(const Score& score, int from, int to);
+// PhraseStarts lists the bars in [anchor, to) where a phrase begins,
+// counting in phrases from anchor and again from any section marker,
+// repeat or change of time signature after it.
+std::vector<int> PhraseStarts(const Score& score, int anchor, int to);
 
 // PickLick chooses a phrase of a solo that stands on its own: one starting
 // on the phrase grid, whole (usually four bars) when it can be learnt in a

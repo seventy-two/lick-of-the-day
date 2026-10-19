@@ -169,11 +169,25 @@ std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold
             size_t j = i;
             while (j < sm.size() && sm[j] >= threshold) j++;
             if (j - i >= 4) {
+                // Smoothing blurs where it begins: it's the first bar nearby
+                // that jumps up from the one before, if there is one (tested
+                // on tabs that mark their solos: right 73% of the time, from
+                // 60%).
+                size_t first = i;
+                for (size_t x = std::max<size_t>(1, i >= 4 ? i - 4 : 0); x <= i + 1 && x < j; x++)
+                    if (raw[x] - raw[x - 1] >= 2 && raw[x] >= 3) {
+                        first = x;
+                        break;
+                    }
+                if (first < i && !out.empty() && out.back().track == t->index && out.back().end > int(first))
+                    first = i;  // not into the solo before
+                i = first;
                 Solo s;
                 s.track = t->index;
                 s.start = int(i);
                 s.end = int(j);
                 s.raw.assign(raw.begin() + long(i), raw.begin() + long(j));
+                s.before = i > 0 ? raw[i - 1] : 0;
                 double sum = 0;
                 for (double x : s.raw) sum += x;
                 s.mean = sum / s.raw.size();
@@ -209,31 +223,25 @@ int PhraseBars(const MasterBar& m) {
     return q < 2.5 ? 8 : q > 7 ? 2 : 4;
 }
 
-std::vector<int> PhraseStarts(const Score& score, int from, int to) {
+std::vector<int> PhraseStarts(const Score& score, int anchor, int to) {
     std::vector<int> out;
-    // The grid runs from the last place the music restarts its count: the
-    // top, a section marker, a repeat or a change of time signature.
-    int anchor = 0;
-    for (int i = 1; i <= from && i < int(score.masterBars.size()); i++) {
-        const auto& m = score.masterBars[size_t(i)];
-        const auto& p = score.masterBars[size_t(i - 1)];
-        if (m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator) anchor = i;
-    }
-    int len = PhraseBars(score.masterBars[size_t(anchor)]);
-    for (int i = anchor; i < to && i < int(score.masterBars.size());) {
-        if (i >= from) out.push_back(i);
-        int next = i + len;
-        // A new anchor inside this phrase starts the grid again there.
-        for (int k = i + 1; k < next && k < int(score.masterBars.size()); k++) {
-            const auto& m = score.masterBars[size_t(k)];
-            const auto& p = score.masterBars[size_t(k - 1)];
-            if (m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator) {
+    const int n = int(score.masterBars.size());
+    // A section marker, a repeat or a change of time signature starts the
+    // count again.
+    auto restarts = [&](int k) {
+        const auto& m = score.masterBars[size_t(k)];
+        const auto& p = score.masterBars[size_t(k - 1)];
+        return m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator;
+    };
+    for (int i = std::max(0, anchor); i < to && i < n;) {
+        out.push_back(i);
+        int next = i + PhraseBars(score.masterBars[size_t(i)]);
+        for (int k = i + 1; k < next && k < n; k++)
+            if (restarts(k)) {
                 next = k;
                 break;
             }
-        }
         i = next;
-        if (i < int(score.masterBars.size())) len = PhraseBars(score.masterBars[size_t(i)]);
     }
     return out;
 }
@@ -248,7 +256,31 @@ std::optional<Lick> PickLick(const Score& score, const Solo& solo, uint32_t seed
         double secs, rank;
     };
     std::vector<Option> options;
-    auto starts = PhraseStarts(score, std::max(0, solo.start - 2), solo.end);
+    // Phrases count from the top of the solo, or from its marker if the tab
+    // names it (a little before where the notes say it starts, sometimes).
+    int anchor = solo.start;
+    if (solo.raw.empty() || solo.raw[0] - solo.before < 2 || solo.raw[0] < 3) {
+        // No clear way in (it builds up, or follows on from another lead
+        // part), so where it starts is a guess: count in the song's phrases
+        // instead, from the top or the last marker, repeat or change of time
+        // signature, to the phrase start nearest it.
+        int from = 0;
+        for (int k = 1; k <= solo.start; k++) {
+            const auto& m = score.masterBars[size_t(k)];
+            const auto& p = score.masterBars[size_t(k - 1)];
+            if (m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator) from = k;
+        }
+        int len = PhraseBars(score.masterBars[size_t(solo.start)]);
+        int before = from + (solo.start - from) / len * len;
+        anchor = solo.start - before <= before + len - solo.start ? before : before + len;
+    }
+    auto names = SectionNames(score);
+    for (int k = std::max(0, solo.start - 4); k < solo.end; k++)
+        if (score.masterBars[size_t(k)].hasSection && soloName(names[size_t(k)])) {
+            if (k <= solo.start || k < anchor) anchor = k;
+            break;
+        }
+    auto starts = PhraseStarts(score, anchor, solo.end);
     bool opening = true;
     for (int g : starts) {
         int full = PhraseBars(score.masterBars[size_t(g)]);

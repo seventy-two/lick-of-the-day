@@ -306,6 +306,21 @@ void testLick() {
         CHECK_EQ(l->bars, 4);
         CHECK_EQ(l->notes, 64);
     }
+    // An extra riff bar before the solo (as a bar of open Ds before one):
+    // the phrase starts with the solo, not on the song's count of four.
+    Score odd = s;
+    odd.masterBars.insert(odd.masterBars.begin(), odd.masterBars[0]);
+    odd.tracks[0].staff.bars.insert(odd.tracks[0].staff.bars.begin(), odd.tracks[0].staff.bars[0]);
+    for (size_t i = 0; i < odd.masterBars.size(); i++) odd.masterBars[i].index = int(i);
+    Finish(odd);
+    auto ol = FindLick(odd, 7);
+    CHECK(ol.has_value());
+    if (ol) {
+        CHECK_EQ(ol->soloStart, 9);
+        CHECK_EQ(ol->startBar, 9);
+        CHECK_EQ(ol->bars, 4);
+    }
+
     // Named sections: a solo counts, the bars after one don't.
     Score named = s;
     named.masterBars[8].hasSection = true;
@@ -330,7 +345,7 @@ void testPhrases() {
     s.masterBars[10].hasSection = true;
     auto p = PhraseStarts(s, 0, 30);
     CHECK((p == std::vector<int>{0, 4, 8, 10, 14, 18, 22, 26}));
-    CHECK((PhraseStarts(s, 15, 24) == std::vector<int>{18, 22}));
+    CHECK((PhraseStarts(s, 15, 24) == std::vector<int>{15, 19, 23}));
     // 2/4 bars go in eights; a change of time signature restarts the count.
     for (int b = 20; b < 30; b++) s.masterBars[size_t(b)].numerator = 2;
     CHECK_EQ(PhraseBars(s.masterBars[20]), 8);
