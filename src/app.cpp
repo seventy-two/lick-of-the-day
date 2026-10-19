@@ -34,6 +34,7 @@ const char* Play = "\xEE\x9D\xA8";      // U+E768
 const char* Pause = "\xEE\x9D\xA9";     // U+E769
 const char* Minimise = "\xEE\xA4\xA1";  // U+E921
 const char* Close = "\xEE\xA2\xBB";     // U+E8BB
+const char* Restart = "\xEE\x9C\xAC";   // U+E72C
 }  // namespace icon
 
 std::string known(REFKNOWNFOLDERID id) {
@@ -229,6 +230,17 @@ void App::changePitch(int delta) {
     saveConfig();
 }
 
+void App::restartRamp() {
+    if (!lick_ || !cfg_.ramping) return;
+    bool was = player_.Playing();
+    player_.Stop();  // back to the top
+    loopsSeen_ = 0;
+    upToSpeed_ = false;
+    speed_ = cfg_.ramp.start;
+    applySpeed();
+    if (was) player_.Play();
+}
+
 void App::changeRamp() {
     auto& r = cfg_.ramp;
     r.start = std::clamp(r.start, 25, 150);
@@ -419,6 +431,7 @@ void App::Frame() {
             tabScroll_ = 0;
             loadSequence();
         }
+        if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) restartRamp();
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) changePitch(1);
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) changePitch(-1);
         int delta = ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -5 : ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 5 : 0;
@@ -551,25 +564,36 @@ void App::drawInfo(float width, float height) {
         ImGui::SameLine();
         if (button("+", false, false, "Up a semitone (\xE2\x86\x91)")) changePitch(1);
         ImGui::PopStyleVar();
+        // The ramp's settings on the right, with a button to start it again.
+        char rl[64];
+        std::snprintf(rl, sizeof(rl), "Ramp %d\xE2\x86\x92%d%%, +%d", cfg_.ramp.start, cfg_.ramp.end, cfg_.ramp.step);
+        ImGui::PushFont(small_);
+        float rw = ImGui::CalcTextSize(rl).x + 12 * k;
+        float iw = ImGui::CalcTextSize(icon::Restart).x + 12 * k;
+        ImGui::PopFont();
+        const float rampX = panelMin_.x + 14 * k + inner - rw;
+        const float restartX = rampX - iw - 2 * k;
         if (lick_) {
             const Staff& st = lick_->score->tracks[size_t(lick_->lick.track)].staff;
             ImGui::SameLine(0, 8 * k);
             ImGui::PushFont(small_);
             ImGui::AlignTextToFramePadding();
             std::string as = transpose_ ? "as " + ShiftedTuningName(st.tuning, transpose_) : "as written";
-            ImGui::TextColored(transpose_ ? p.accent : p.muted, "%s", as.c_str());
+            float room = restartX - 6 * k - ImGui::GetCursorScreenPos().x;
+            ImGui::TextColored(transpose_ ? p.accent : p.muted, "%s", fit(as, small_, small_->FontSize, room).c_str());
             ImGui::PopFont();
         }
         ImGui::EndDisabled();
         ImGui::PopID();
 
-        // The ramp's settings, on the right.
-        char rl[64];
-        std::snprintf(rl, sizeof(rl), "Ramp %d\xE2\x86\x92%d%%, +%d", cfg_.ramp.start, cfg_.ramp.end, cfg_.ramp.step);
         ImGui::PushFont(small_);
-        float rw = ImGui::CalcTextSize(rl).x + 12 * k;
+        const float linkY = pitchY + ImGui::GetStyle().FramePadding.y - 2 * k;
+        ImGui::SetCursorScreenPos(ImVec2(restartX, linkY));
+        ImGui::BeginDisabled(!lick_ || !cfg_.ramping);
+        if (link(icon::Restart, false, "Start the ramp again: back to the start speed, from the top (Home)")) restartRamp();
+        ImGui::EndDisabled();
         // Its text level with the row's: a link's text sits 2px into it.
-        ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k + inner - rw, pitchY + ImGui::GetStyle().FramePadding.y - 2 * k));
+        ImGui::SetCursorScreenPos(ImVec2(rampX, linkY));
         if (link(rl, false, "Change how the ramp goes")) ImGui::OpenPopup("ramp");
         ImGui::PopFont();
         ImGui::SetNextWindowPos(ImVec2(panelMax_.x - 8 * k, panelMin_.y + 8 * k), ImGuiCond_Appearing, ImVec2(1, 0));

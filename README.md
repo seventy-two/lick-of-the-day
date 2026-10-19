@@ -42,7 +42,8 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   the beat.
   - **Loop** goes round and round; **Ramp** starts at 60% and adds 5% each
     time round up to 100%. The "Ramp 60→100%, +5" link above the controls
-    changes all three.
+    changes all three, and the ↺ beside it starts the ramp again: back to
+    the start speed, from the top.
   - **Pitch − / +** shift everything but the drums a semitone at a time,
     to play along on a guitar tuned differently: the tab stays as written,
     so the shapes are the same. It remembers the guitar (by its top
@@ -62,8 +63,8 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   tremolo picking, and rhythm below (stems, beams, flags, dots, tuplets,
   rests). The notes being played light up.
 
-Keys: Space play/pause, L loop, R ramp, ← → speed, ↑ ↓ pitch, M click,
-B band, S whole solo.
+Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
+← → speed, ↑ ↓ pitch, M click, B band, S whole solo.
 
 ## Files
 

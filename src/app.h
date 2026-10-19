@@ -53,6 +53,7 @@ private:
     void applyPitch();
     void changePitch(int delta);  // 0 goes back to as written
     void changeRamp();
+    void restartRamp();  // back to the start speed, from the top
     void saveConfig();
     std::string today() const;
 
