@@ -287,14 +287,46 @@ void testLick() {
     auto l = FindLick(s, 7);
     CHECK(l.has_value());
     if (l) {
-        CHECK(l->startBar >= 8 && l->startBar + l->bars <= 14);
-        CHECK(l->notes >= 6 && l->notes <= 40);
+        // A whole phrase, from the top of the solo: bars 8 to 11.
+        CHECK_EQ(l->startBar, 8);
+        CHECK_EQ(l->bars, 4);
+        CHECK_EQ(l->notes, 64);
     }
+    // Named sections: a solo counts, the bars after one don't.
+    Score named = s;
+    named.masterBars[8].hasSection = true;
+    named.masterBars[8].section = "Post solo";
+    auto ns = FindSolos(named);
+    CHECK(!ns.empty() && !ns[0].labelled);
+    named.masterBars[8].section = "Guitar Solo";
+    ns = FindSolos(named);
+    CHECK(!ns.empty() && ns[0].labelled);
     // No solo in a riff-only song.
     Score riff = s;
     riff.masterBars.resize(8);
     riff.tracks[0].staff.bars.resize(8);
     CHECK(!FindLick(riff, 7).has_value());
+}
+
+void testPhrases() {
+    Score s;
+    for (int b = 0; b < 30; b++) s.masterBars.emplace_back();
+    CHECK_EQ(PhraseBars(s.masterBars[0]), 4);
+    // Counted in fours from the top, then again from a section marker.
+    s.masterBars[10].hasSection = true;
+    auto p = PhraseStarts(s, 0, 30);
+    CHECK((p == std::vector<int>{0, 4, 8, 10, 14, 18, 22, 26}));
+    CHECK((PhraseStarts(s, 15, 24) == std::vector<int>{18, 22}));
+    // 2/4 bars go in eights; a change of time signature restarts the count.
+    for (int b = 20; b < 30; b++) s.masterBars[size_t(b)].numerator = 2;
+    CHECK_EQ(PhraseBars(s.masterBars[20]), 8);
+    CHECK((PhraseStarts(s, 14, 30) == std::vector<int>{14, 18, 20, 28}));
+    MasterBar long7;
+    long7.numerator = 7;
+    CHECK_EQ(PhraseBars(long7), 4);
+    long7.numerator = 8;
+    long7.denominator = 4;
+    CHECK_EQ(PhraseBars(long7), 2);
 }
 
 void testPlayer() {
@@ -341,6 +373,7 @@ int main() {
     testLoadScoreRejects();
     testSequence();
     testLick();
+    testPhrases();
     testPlayer();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

@@ -10,6 +10,8 @@ namespace dl {
 namespace {
 
 const std::regex kSoloSection("solo|lead|shred|improv", std::regex::icase);
+// Around a solo, not in it: "Pre-solo", "Post solo", "After solo".
+const std::regex kNearSolo("(pre|post|after|before)[ -]?(solo|lead)", std::regex::icase);
 const std::regex kOtherSection("verse|chorus|riff|intro|outro|break|bridge|interlude|clean|chug|vocal",
                                std::regex::icase);
 const std::regex kSoloTrack("solo|lead", std::regex::icase);
@@ -20,6 +22,8 @@ const std::regex kNotGuitarTrack(
     std::regex::icase);
 
 bool has(const std::string& s, const std::regex& re) { return std::regex_search(s, re); }
+
+bool soloName(const std::string& s) { return has(s, kSoloSection) && !has(s, kNearSolo); }
 
 }  // namespace
 
@@ -143,7 +147,7 @@ std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold
             auto c = counts.find(f.print);
             double s = LeadScore(f, c == counts.end() ? 0 : c->second, unison && f.beats > 0) + nameBonus;
             if (useLabels && !names[i].empty()) {
-                if (has(names[i], kSoloSection)) s += 2.5;
+                if (soloName(names[i])) s += 2.5;
                 else if (has(names[i], kOtherSection)) s -= 0.7;
             }
             raw[i] = s;
@@ -174,7 +178,7 @@ std::vector<Solo> FindSolos(const Score& score, bool useLabels, double threshold
                 for (double x : s.raw) sum += x;
                 s.mean = sum / s.raw.size();
                 s.score = s.mean * std::sqrt(double(j - i));
-                for (size_t k = i; k < j; k++) s.labelled |= has(names[k], kSoloSection);
+                for (size_t k = i; k < j; k++) s.labelled |= soloName(names[k]);
                 out.push_back(std::move(s));
             }
             i = j;
@@ -200,44 +204,93 @@ double Rng::Next() {
     return double(t ^ (t >> 14)) / 4294967296.0;
 }
 
+int PhraseBars(const MasterBar& m) {
+    double q = m.Quarters();
+    return q < 2.5 ? 8 : q > 7 ? 2 : 4;
+}
+
+std::vector<int> PhraseStarts(const Score& score, int from, int to) {
+    std::vector<int> out;
+    // The grid runs from the last place the music restarts its count: the
+    // top, a section marker, a repeat or a change of time signature.
+    int anchor = 0;
+    for (int i = 1; i <= from && i < int(score.masterBars.size()); i++) {
+        const auto& m = score.masterBars[size_t(i)];
+        const auto& p = score.masterBars[size_t(i - 1)];
+        if (m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator) anchor = i;
+    }
+    int len = PhraseBars(score.masterBars[size_t(anchor)]);
+    for (int i = anchor; i < to && i < int(score.masterBars.size());) {
+        if (i >= from) out.push_back(i);
+        int next = i + len;
+        // A new anchor inside this phrase starts the grid again there.
+        for (int k = i + 1; k < next && k < int(score.masterBars.size()); k++) {
+            const auto& m = score.masterBars[size_t(k)];
+            const auto& p = score.masterBars[size_t(k - 1)];
+            if (m.hasSection || m.repeatStart || m.numerator != p.numerator || m.denominator != p.denominator) {
+                next = k;
+                break;
+            }
+        }
+        i = next;
+        if (i < int(score.masterBars.size())) len = PhraseBars(score.masterBars[size_t(i)]);
+    }
+    return out;
+}
+
 std::optional<Lick> PickLick(const Score& score, const Solo& solo, uint32_t seed) {
     const Staff& st = score.tracks[size_t(solo.track)].staff;
+    const int nbars = int(std::min(st.bars.size(), score.masterBars.size()));
     std::vector<BarFeatures> fs;
-    for (size_t i = 0; i < st.bars.size() && i < score.masterBars.size(); i++)
-        fs.push_back(Features(st.bars[i], score.masterBars[i], st));
+    for (int i = 0; i < nbars; i++) fs.push_back(Features(st.bars[size_t(i)], score.masterBars[size_t(i)], st));
     struct Option {
         int start, bars, notes;
         double secs, rank;
     };
     std::vector<Option> options;
-    for (int start = solo.start; start < solo.end; start++) {
-        if (fs[size_t(start)].beats < 3) continue;
-        for (int len : {2, 1, 3, 4}) {
-            int end = start + len;
-            if (end > solo.end) break;
-            bool crosses = false;
-            for (int k = 0; k < len; k++) {
-                const auto& m = score.masterBars[size_t(start + k)];
-                if ((k > 0 && m.repeatStart) || (k < len - 1 && m.repeatCount > 0) || m.alternateEndings) crosses = true;
+    auto starts = PhraseStarts(score, std::max(0, solo.start - 2), solo.end);
+    bool opening = true;
+    for (int g : starts) {
+        int full = PhraseBars(score.masterBars[size_t(g)]);
+        // The whole phrase if it can be learnt in a sitting, else its halves,
+        // else its quarters: each still starting where the phrase does or
+        // where its answer does.
+        bool found = false;
+        for (int len = full, level = 0; len >= 1 && !found; len /= 2, level++) {
+            for (int start = g; start < g + full && start + len <= nbars; start += len) {
+                int end = start + len;
+                // Most of it must be in the solo; a half or less only all of it.
+                int inside = std::max(0, std::min(end, solo.end) - std::max(start, solo.start));
+                if (level == 0 ? inside * 4 < len * 3 : inside < len) continue;
+                bool crosses = false;
+                for (int k = 0; k < len; k++) {
+                    const auto& m = score.masterBars[size_t(start + k)];
+                    if ((k > 0 && m.repeatStart) || (k < len - 1 && m.repeatCount > 0) || m.alternateEndings) crosses = true;
+                }
+                if (crosses) continue;
+                int notes = 0;
+                double quarters = 0;
+                for (int k = start; k < end; k++) {
+                    notes += fs[size_t(k)].notes;
+                    quarters += fs[size_t(k)].quarters;
+                }
+                double secs = quarters * 60 / TempoAt(score, start);
+                double maxNotes = level == 0 ? 80 : 48, maxSecs = level == 0 ? 20 : 12;
+                if (notes < 6 || notes > maxNotes || secs > maxSecs) continue;
+                if (fs[size_t(start)].notes == 0 || fs[size_t(end - 1)].beats == 0) continue;
+                double sum = 0;
+                int n = 0;
+                for (int k = std::max(start, solo.start); k < std::min(end, solo.end); k++) {
+                    sum += solo.raw[size_t(k - solo.start)];
+                    n++;
+                }
+                double rank = sum / std::max(n, 1) + (level == 0 ? 0.6 : level == 1 ? 0.2 : 0);
+                if (opening && start == g) rank += 0.5;  // how the solo begins
+                options.push_back({start, len, notes, secs, rank});
+                found = true;
             }
-            if (crosses) break;
-            int notes = 0;
-            double quarters = 0;
-            for (int k = start; k < end; k++) {
-                notes += fs[size_t(k)].notes;
-                quarters += fs[size_t(k)].quarters;
-            }
-            double secs = quarters * 60 / TempoAt(score, start);
-            if (notes < 6 || notes > 40 || secs > 12) continue;
-            if (fs[size_t(end - 1)].beats == 0) continue;
-            double sum = 0;
-            for (int k = start; k < end; k++) sum += solo.raw[size_t(k - solo.start)];
-            double mean = sum / len;
-            // Two bars is the aim; others only when they suit the phrase better.
-            double fit = len == 2 ? 0.4 : len == 1 && notes >= 12 ? 0.2 : len >= 3 && notes <= 20 ? 0.1 : -0.3;
-            options.push_back({start, len, notes, secs, mean + fit});
-            break;  // the first length that fits, in order of preference
         }
+        if (found) opening = false;
     }
     if (options.empty()) return std::nullopt;
     std::stable_sort(options.begin(), options.end(), [](const Option& a, const Option& b) { return a.rank > b.rank; });

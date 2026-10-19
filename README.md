@@ -23,9 +23,14 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   thing. A run of four or more high-scoring bars is a solo. Tested with the
   labels hidden on the 282 tabs that have them, the top pick falls in a
   labelled solo about 85% of the time.
-- **Picks the lick**: one to four bars of the solo (two if they fit), 6 to
-  40 notes and at most 12 seconds at full speed, never across a repeat.
-  Which part of the solo is seeded by the date.
+- **Picks the lick**: a phrase of the solo that stands on its own. Phrases
+  are counted from the top of the song, or from the last section marker,
+  repeat or change of time signature: four bars (eight short ones such as
+  2/4, two long ones such as 8/4). A lick is a whole phrase when it's at
+  most 80 notes and 20 seconds at full speed, else half of one (or a
+  quarter), still starting where the phrase or its second half does. The
+  phrase that opens the solo is favoured; which one you get is seeded by
+  the date. Sections named "Pre-solo" or "Post solo" don't count as solo.
 - **One a day**: each day's song comes from a seeded shuffle of the songs
   (versions of one song count once), leaving out songs used in the last
   120 days. The day's lick is saved, so it's the same all day. **Another**
