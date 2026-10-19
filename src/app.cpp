@@ -356,7 +356,7 @@ void App::toggle(bool& v) {
     saveConfig();
 }
 
-bool App::Animating() const { return player_.Playing() || searching_; }
+bool App::Animating() const { return player_.Playing() || searching_ || panelShown_ != panelTarget_; }
 
 bool App::Place(RECT& r) const {
     if (!cfg_.placed) return false;
@@ -513,9 +513,29 @@ void App::Frame() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
     const float panelW = std::min(380 * scale_, io.DisplaySize.x * 0.45f);
-    drawInfo(panelW, io.DisplaySize.y);
-    ImGui::SameLine(0, 0);
-    drawTab(io.DisplaySize.x - panelW, io.DisplaySize.y);
+    // While a loop plays the panel slides off to the left, unless the
+    // mouse comes to the left edge (or onto the panel) or a popup is open.
+    {
+        const ImVec2 m = io.MousePos;
+        const bool inside = m.x >= 0 && m.y >= 0 && m.x < io.DisplaySize.x && m.y < io.DisplaySize.y;
+        const bool wanted = inside && (m.x < 16 * scale_ || (panelShown_ > 0.5f && m.x < panelW * panelShown_));
+        const bool popup = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        panelTarget_ = player_.Playing() && cfg_.loop && !wanted && !popup ? 0.0f : 1.0f;
+        const float step = io.DeltaTime / 0.18f;  // seconds to slide
+        panelShown_ = panelTarget_ > panelShown_ ? std::min(panelTarget_, panelShown_ + step)
+                                                 : std::max(panelTarget_, panelShown_ - step);
+    }
+    const float t = panelShown_, eased = t * t * (3 - 2 * t);
+    const float visible = std::round(panelW * eased);
+    if (visible >= 1) {
+        ImGui::SetCursorPos(ImVec2(visible - panelW, 0));
+        drawInfo(panelW, io.DisplaySize.y);
+        ImGui::SameLine(0, 0);
+    } else {
+        panelMin_ = panelMax_ = ImVec2(0, 0);  // nothing to drag by
+        ImGui::SetCursorPos(ImVec2(0, 0));
+    }
+    drawTab(io.DisplaySize.x - visible, io.DisplaySize.y);
     ImGui::End();
 }
 
@@ -962,6 +982,19 @@ void App::drawTab(float width, float height) {
     }
     if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0)
         ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * 80 * k);
+    // With the panel away, the loop and speed in the corner, and a strip
+    // at the left edge to bring the panel back.
+    if (panelShown_ < 1) {
+        const float a = 1 - panelShown_;
+        const ImVec2 wp = ImGui::GetWindowPos();
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "Loop %d  \xC2\xB7  %d%%", player_.Loops() + 1, speed_);
+        ImGui::PushFont(small_);
+        ImVec2 ts = ImGui::CalcTextSize(buf);
+        ImGui::GetForegroundDrawList()->AddText(ImVec2(wp.x + width - ts.x - 12 * k, wp.y + 4 * k), col(p.muted, a), buf);
+        ImGui::PopFont();
+        if (wp.x < 1) ImGui::GetForegroundDrawList()->AddRectFilled(wp, ImVec2(wp.x + 3 * k, wp.y + height), col(p.card, a));
+    }
     ImGui::EndChild();
     ImGui::PopStyleColor();
 }

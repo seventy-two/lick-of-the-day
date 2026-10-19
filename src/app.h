@@ -116,6 +116,9 @@ private:
     ImVec2 panelMin_, panelMax_;
     std::vector<std::pair<ImVec2, ImVec2>> hot_;
     float tabScroll_ = 0;
+    // The panel slides away while a loop plays, so the tab gets the
+    // window: 1 shown, 0 hidden.
+    float panelShown_ = 1, panelTarget_ = 1;
 };
 
 }  // namespace dl

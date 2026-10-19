@@ -70,6 +70,10 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
     cursor.
   - **Open** opens the file in whatever opens `.gp` files (Guitar Pro,
     TuxGuitar).
+- **Out of the way while looping**: while a loop plays, the panel slides
+  off to the left so the tab has the whole window, with the loop and speed
+  in its corner. It comes back on pause, or when the mouse goes to the
+  window's left edge.
 - **The tab**: one line of tablature with bar numbers, sections, time
   signatures, ties, dead notes, harmonics, grace notes, hammer-ons and
   pull-offs, slides, bends and releases, vibrato, palm muting, taps,
