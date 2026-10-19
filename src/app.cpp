@@ -528,6 +528,7 @@ void App::drawInfo(float width, float height) {
     {
         const float pitchY = panelMax_.y - 10 * k - 2 * rowH - 6 * k - small_->FontSize - 12 * k;
         ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, pitchY));
+        ImGui::PushID("pitch");  // its − and + mustn't clash with the speed's
         ImGui::BeginDisabled(!lick_);
         ImGui::PushFont(small_);
         ImGui::AlignTextToFramePadding();
@@ -560,6 +561,7 @@ void App::drawInfo(float width, float height) {
             ImGui::PopFont();
         }
         ImGui::EndDisabled();
+        ImGui::PopID();
 
         // The ramp's settings, on the right.
         char rl[64];
