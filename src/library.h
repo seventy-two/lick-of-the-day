@@ -83,6 +83,7 @@ struct Config {
     // The top string of the guitar played along on (MIDI), to shift the
     // pitch to suit; 0 plays tabs as written.
     int tuneTo = 0;
+    bool panel = true;  // the left panel shown, not tucked away
     // The window's place, if it's been moved; else it opens at the
     // default place.
     bool placed = false;

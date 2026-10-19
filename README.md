@@ -70,10 +70,9 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
     cursor.
   - **Open** opens the file in whatever opens `.gp` files (Guitar Pro,
     TuxGuitar).
-- **Out of the way while looping**: while a loop plays, the panel slides
-  off to the left so the tab has the whole window, with the loop and speed
-  in its corner. It comes back on pause, or when the mouse goes to the
-  window's left edge.
+- **More room for the tab**: the arrow at the panel's edge (or P) tucks
+  the panel away so the tab has the whole window, with the loop and speed
+  in its corner, and brings it back.
 - **The tab**: one line of tablature with bar numbers, sections, time
   signatures, ties, dead notes, harmonics, grace notes, hammer-ons and
   pull-offs, slides, bends and releases, vibrato, palm muting, taps,
@@ -82,7 +81,7 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
 
 Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
 ← → speed, ↑ ↓ pitch, M click, B band, S whole solo, F favourite,
-H favourites and history.
+H favourites and history, P tuck the panel away or bring it back.
 
 ## Files
 
@@ -91,7 +90,8 @@ H favourites and history.
 - `config.json`: `folders` searched for tabs (with subfolders; Documents\guitar
   and Downloads at first), `ramp` (`start`, `step`, `end`, in percent),
   `repeatDays`, the player's switches, `tuneTo` (the guitar's top string
-  as a MIDI note, 0 for as written), and the window's place.
+  as a MIDI note, 0 for as written), `panel` (shown or tucked away), and
+  the window's place.
 - `state.json`: each day's lick and what was skipped, the favourites and
   solos done, and the files found to have no solo (not read again until
   they change).

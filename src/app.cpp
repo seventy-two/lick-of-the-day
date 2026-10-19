@@ -39,6 +39,8 @@ const char* Star = "\xEE\x9C\xB4";      // U+E734
 const char* StarFill = "\xEE\x9C\xB5";  // U+E735
 const char* Check = "\xEE\x9C\xBE";     // U+E73E
 const char* History = "\xEE\xA0\x9C";   // U+E81C
+const char* Left = "\xEE\x9D\xAB";      // U+E76B
+const char* Right = "\xEE\x9D\xAC";     // U+E76C
 }  // namespace icon
 
 std::string known(REFKNOWNFOLDERID id) {
@@ -97,6 +99,7 @@ App::App(HWND hwnd, std::function<void()> wake) : hwnd_(hwnd), wake_(std::move(w
     SaveConfig(dir_, cfg_);  // so every setting is there to edit
     daily_ = std::make_unique<Daily>(dir_, cfg_);
     speed_ = cfg_.ramping ? cfg_.ramp.start : cfg_.speed;
+    panelShown_ = panelTarget_ = cfg_.panel ? 1.0f : 0.0f;
 
     // The soundfont is in the exe.
     if (HRSRC r = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_SOUNDFONT), RT_RCDATA)) {
@@ -342,6 +345,7 @@ void App::toggle(bool& v) {
         if (!cfg_.loop && cfg_.ramping) cfg_.ramping = false;
     }
     if (&v == &cfg_.click) player_.SetClick(cfg_.click);
+    if (&v == &cfg_.panel) panelTarget_ = cfg_.panel ? 1.0f : 0.0f;
     if (&v == &cfg_.band && lick_) player_.SetSolo(cfg_.band ? -1 : lick_->lick.track);
     if (&v == &cfg_.ramping) {
         if (cfg_.ramping && !cfg_.loop) {
@@ -494,6 +498,7 @@ void App::Frame() {
         if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) restartRamp();
         if (ImGui::IsKeyPressed(ImGuiKey_F, false) && lick_) toggleFavourite(lick_->lick);
         if (ImGui::IsKeyPressed(ImGuiKey_H, false)) openKept_ = true;
+        if (ImGui::IsKeyPressed(ImGuiKey_P, false)) toggle(cfg_.panel);
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) changePitch(1);
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) changePitch(-1);
         int delta = ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -5 : ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 5 : 0;
@@ -513,14 +518,7 @@ void App::Frame() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
     const float panelW = std::min(380 * scale_, io.DisplaySize.x * 0.45f);
-    // While a loop plays the panel slides off to the left, unless the
-    // mouse comes to the left edge (or onto the panel) or a popup is open.
     {
-        const ImVec2 m = io.MousePos;
-        const bool inside = m.x >= 0 && m.y >= 0 && m.x < io.DisplaySize.x && m.y < io.DisplaySize.y;
-        const bool wanted = inside && (m.x < 16 * scale_ || (panelShown_ > 0.5f && m.x < panelW * panelShown_));
-        const bool popup = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
-        panelTarget_ = player_.Playing() && cfg_.loop && !wanted && !popup ? 0.0f : 1.0f;
         const float step = io.DeltaTime / 0.18f;  // seconds to slide
         panelShown_ = panelTarget_ > panelShown_ ? std::min(panelTarget_, panelShown_ + step)
                                                  : std::max(panelTarget_, panelShown_ - step);
@@ -936,6 +934,32 @@ void App::drawKept() {
     ImGui::PopStyleVar(2);
 }
 
+// drawPanelArrow draws the arrow that tucks the panel away and brings it
+// back, at the tab's left edge, centred in height.
+void App::drawPanelArrow(float height) {
+    const Palette& p = *pal;
+    const float k = scale_;
+    const ImVec2 wp = ImGui::GetWindowPos();
+    const float bw = 16 * k, bh = 40 * k;
+    const ImVec2 save = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos(ImVec2(wp.x, wp.y + (height - bh) / 2));
+    ImGui::PushStyleColor(ImGuiCol_Button, panelShown_ < 0.5f ? p.card : ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, p.hover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, p.hover);
+    ImGui::PushStyleColor(ImGuiCol_Text, p.muted);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
+    ImGui::PushFont(small_);
+    if (ImGui::Button(cfg_.panel ? icon::Left : icon::Right, ImVec2(bw, bh))) toggle(cfg_.panel);
+    ImGui::PopFont();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
+    hot_.push_back({ImGui::GetItemRectMin(), ImGui::GetItemRectMax()});
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("%s", cfg_.panel ? "Tuck the panel away (P)" : "Bring the panel back (P)");
+    ImGui::SetCursorScreenPos(save);
+}
+
 void App::drawTab(float width, float height) {
     const Palette& p = *pal;
     const float k = scale_;
@@ -947,6 +971,7 @@ void App::drawTab(float width, float height) {
         ImVec2 ts = ImGui::CalcTextSize(m.c_str());
         ImGui::SetCursorPos(ImVec2((width - ts.x) / 2, (height - ts.y) / 2));
         ImGui::TextColored(p.muted, "%s", m.c_str());
+        drawPanelArrow(height);
         ImGui::EndChild();
         ImGui::PopStyleColor();
         return;
@@ -982,18 +1007,18 @@ void App::drawTab(float width, float height) {
     }
     if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0)
         ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * 80 * k);
-    // With the panel away, the loop and speed in the corner, and a strip
-    // at the left edge to bring the panel back.
-    if (panelShown_ < 1) {
-        const float a = 1 - panelShown_;
+    // The arrow, and with the panel away, the loop and speed in the corner.
+    drawPanelArrow(height - scrollH);
+    {
         const ImVec2 wp = ImGui::GetWindowPos();
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "Loop %d  \xC2\xB7  %d%%", player_.Loops() + 1, speed_);
-        ImGui::PushFont(small_);
-        ImVec2 ts = ImGui::CalcTextSize(buf);
-        ImGui::GetForegroundDrawList()->AddText(ImVec2(wp.x + width - ts.x - 12 * k, wp.y + 4 * k), col(p.muted, a), buf);
-        ImGui::PopFont();
-        if (wp.x < 1) ImGui::GetForegroundDrawList()->AddRectFilled(wp, ImVec2(wp.x + 3 * k, wp.y + height), col(p.card, a));
+        if (panelShown_ < 1 && (player_.Playing() || player_.Loops() > 0)) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "Loop %d  \xC2\xB7  %d%%", player_.Loops() + 1, speed_);
+            ImGui::PushFont(small_);
+            ImVec2 ts = ImGui::CalcTextSize(buf);
+            ImGui::GetForegroundDrawList()->AddText(ImVec2(wp.x + width - ts.x - 12 * k, wp.y + 4 * k), col(p.muted, 1 - panelShown_), buf);
+            ImGui::PopFont();
+        }
     }
     ImGui::EndChild();
     ImGui::PopStyleColor();

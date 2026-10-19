@@ -244,6 +244,7 @@ Config LoadConfig(const std::string& dir, const std::vector<std::string>& defaul
     get("speed", c.speed);
     c.speed = std::clamp(c.speed, 25, 150);
     get("tuneTo", c.tuneTo);
+    get("panel", c.panel);
     if (c.tuneTo < 0 || c.tuneTo > 127) c.tuneTo = 0;
     if (j.contains("window") && j["window"].is_object()) {
         auto& w = j["window"];
@@ -265,7 +266,8 @@ bool SaveConfig(const std::string& dir, const Config& c) {
               {"click", c.click},
               {"band", c.band},
               {"speed", c.speed},
-              {"tuneTo", c.tuneTo}};
+              {"tuneTo", c.tuneTo},
+              {"panel", c.panel}};
     if (c.placed) j["window"] = {{"x", c.x}, {"y", c.y}, {"w", c.w}, {"h", c.h}};
     return writeAtomically(toPath(dir) / "config.json", j.dump(1));
 }

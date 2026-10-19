@@ -68,6 +68,7 @@ private:
     void drawInfo(float width, float height);
     void drawTab(float width, float height);
     void drawKept();  // the favourites and history popup
+    void drawPanelArrow(float height);
     bool button(const char* label, bool on = false, bool accent = false, const char* tip = nullptr);
     bool link(const char* label, bool on = false, const char* tip = nullptr);
 
@@ -116,8 +117,7 @@ private:
     ImVec2 panelMin_, panelMax_;
     std::vector<std::pair<ImVec2, ImVec2>> hot_;
     float tabScroll_ = 0;
-    // The panel slides away while a loop plays, so the tab gets the
-    // window: 1 shown, 0 hidden.
+    // The panel slides away and back with its arrow: 1 shown, 0 hidden.
     float panelShown_ = 1, panelTarget_ = 1;
 };
 
