@@ -63,6 +63,7 @@ void Player::setupChannels() {
         tsf_channel_set_pan(synth_, c.channel, c.pan);
         tsf_channel_set_pitchrange(synth_, c.channel, float(kWheelRange));
         tsf_channel_set_pitchwheel(synth_, c.channel, 8192);
+        tsf_channel_set_tuning(synth_, c.channel, c.drums || c.channel == kClickChannel ? 0.0f : float(transpose_));
     }
 }
 
@@ -132,6 +133,14 @@ void Player::SetSolo(int track) {
     if (!synth_) return;
     for (const auto& c : seq_.channels)
         if (!audible(c.channel)) tsf_channel_note_off_all(synth_, c.channel);
+}
+
+void Player::SetTranspose(int semitones) {
+    std::lock_guard<std::mutex> lock(mu_);
+    transpose_ = semitones;
+    if (!synth_) return;
+    for (const auto& c : seq_.channels)
+        if (!c.drums && c.channel != kClickChannel) tsf_channel_set_tuning(synth_, c.channel, float(semitones));
 }
 
 bool Player::audible(int channel) const {

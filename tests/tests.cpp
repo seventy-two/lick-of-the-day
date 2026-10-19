@@ -67,6 +67,20 @@ void testTuning() {
     CHECK_EQ(DescribeTuning({64, 59, 55, 50, 45, 40, 33}, 0), std::string("7-string Drop A"));
     CHECK_EQ(DescribeTuning({62, 57, 55, 50, 45, 38}, 0), std::string("Tuning D A D G A D"));
     CHECK_EQ(DescribeTuning({64, 59, 55, 50, 45, 40}, 2), std::string("capo 2"));
+
+    // A D standard guitar (top string D, 62) playing along.
+    const std::vector<int> bStd = {59, 54, 50, 45, 40, 35}, eStd = {64, 59, 55, 50, 45, 40};
+    CHECK_EQ(TopString(bStd, 0), 59);
+    CHECK_EQ(TopString(eStd, 2), 66);
+    CHECK_EQ(TransposeFor(bStd, 0, 62), 3);
+    CHECK_EQ(TransposeFor(eStd, 0, 62), -2);
+    CHECK_EQ(TransposeFor(eStd, 0, 0), 0);  // as written
+    CHECK_EQ(TransposeFor(eStd, 0, 40), -12);
+    CHECK_EQ(TransposeFor({62, 57, 53, 48, 43, 36}, 0, 62), 0);  // Drop C has D on top
+    CHECK_EQ(ShiftedTuningName(bStd, 3), std::string("D standard"));
+    CHECK_EQ(ShiftedTuningName(bStd, 5), std::string("E standard"));
+    CHECK_EQ(ShiftedTuningName({64, 59, 55, 50, 45, 38}, -2), std::string("Drop C"));
+    CHECK_EQ(ShiftedTuningName({62, 57, 55, 50, 45, 38}, 1), std::string("Eb Bb Eb Ab Bb Eb"));
 }
 
 void testDates() {
@@ -358,6 +372,36 @@ void testPlayer() {
     p.SetClick(true);
     p.Play();
     CHECK(p.Position() < 0);
+
+    // Transposing: one held A (220 Hz) comes out an octave up at +12.
+    auto pitch = [&](int semitones) {
+        Sequence q;
+        Channel c;
+        c.program = 0;
+        q.channels.push_back(c);
+        Event on;
+        on.type = Event::On;
+        on.key = 57;
+        on.velocity = 1;
+        q.events.push_back(on);
+        q.length = 2;
+        Player pl;
+        pl.OpenOffline(sf2.data(), sf2.size());
+        pl.Load(q);
+        pl.SetTranspose(semitones);
+        pl.Play();
+        std::vector<float> out(2 * 44100 / 2);
+        pl.Render(out.data(), 44100 / 2);
+        // Count upward zero crossings over the second half of it (harmonics
+        // add some, the same at either pitch).
+        int crossings = 0;
+        for (size_t i = 44100 / 4; i + 1 < out.size() / 2; i++)
+            if (out[2 * i] <= 0 && out[2 * i + 2] > 0) crossings++;
+        return crossings * 4.0;  // a quarter of a second
+    };
+    double plain = pitch(0), up = pitch(12);
+    CHECK(plain > 0);
+    CHECK(up / plain > 1.9 && up / plain < 2.1);
 }
 
 }  // namespace

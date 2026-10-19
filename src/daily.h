@@ -52,6 +52,20 @@ private:
 // a staff's strings, top first; standard six-string tuning gives "".
 std::string DescribeTuning(const std::vector<int>& tuning, int capo);
 
+// Pitch shifting, to play along on a guitar tuned differently from the
+// tab. The guitar is remembered by its top string's note (MIDI), so the
+// same guitar gets the right shift for any tab: a D standard guitar (62)
+// needs +3 for a B standard tab and -2 for an E standard one.
+
+// TopString is the note the tab's top string sounds, capo and all.
+int TopString(const std::vector<int>& tuning, int capo);
+// TransposeFor is the shift for a guitar whose top string is guitarTop (0
+// for none: as written), between -12 and 12.
+int TransposeFor(const std::vector<int>& tuning, int capo, int guitarTop);
+// ShiftedTuningName names the tuning the tab sounds in once shifted:
+// "D standard", "Drop C", and "E standard" rather than "".
+std::string ShiftedTuningName(const std::vector<int>& tuning, int semitones);
+
 // ReadFile reads a whole file (path in UTF-8).
 std::vector<uint8_t> ReadFile(const std::string& path);
 

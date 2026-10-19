@@ -41,7 +41,14 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   moves, palm muting and dead notes shorter, ties held, grace notes before
   the beat.
   - **Loop** goes round and round; **Ramp** starts at 60% and adds 5% each
-    time round up to 100% (all three in `config.json`).
+    time round up to 100%. The "Ramp 60→100%, +5" link above the controls
+    changes all three.
+  - **Pitch − / +** shift everything but the drums a semitone at a time,
+    to play along on a guitar tuned differently: the tab stays as written,
+    so the shapes are the same. It remembers the guitar (by its top
+    string), not the shift, so a D standard guitar gets +3 on a B standard
+    tab and −2 on an E standard one without asking. Click the number to
+    play tabs as written again.
   - **− / +** change the speed by 5% (25–150%).
   - **Click** adds a metronome and a bar's count-in.
   - **Band** plays the other parts too; otherwise only the lick's guitar.
@@ -55,8 +62,8 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
   tremolo picking, and rhythm below (stems, beams, flags, dots, tuplets,
   rests). The notes being played light up.
 
-Keys: Space play/pause, L loop, R ramp, ← → speed, M click, B band,
-S whole solo.
+Keys: Space play/pause, L loop, R ramp, ← → speed, ↑ ↓ pitch, M click,
+B band, S whole solo.
 
 ## Files
 
@@ -64,7 +71,8 @@ S whole solo.
 
 - `config.json`: `folders` searched for tabs (with subfolders; Documents\guitar
   and Downloads at first), `ramp` (`start`, `step`, `end`, in percent),
-  `repeatDays`, the player's switches, and the window's place.
+  `repeatDays`, the player's switches, `tuneTo` (the guitar's top string
+  as a MIDI note, 0 for as written), and the window's place.
 - `state.json`: each day's lick and what was skipped, and the files found
   to have no solo (not read again until they change).
 

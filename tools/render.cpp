@@ -1,5 +1,5 @@
 // render plays a file's lick into a WAV, to listen to the synth offline:
-// render <file.gp5> <out.wav> [seed]
+// render <soundfont.sf2> <file.gp5> <out.wav> [seed] [semitones]
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -30,6 +30,7 @@ int main(int argc, char** argv) {
     if (!p.OpenOffline(sf2.data(), sf2.size())) return 1;
     p.Load(dl::BuildSequence(s, l->startBar, l->startBar + l->bars));
     p.SetSolo(l->track);
+    p.SetTranspose(argc > 5 ? std::atoi(argv[5]) : 0);
     p.SetClick(true);
     p.SetLoop(true);
     p.Play();

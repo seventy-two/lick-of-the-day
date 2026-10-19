@@ -67,6 +67,9 @@ struct Config {
     // The player's settings, kept between runs.
     bool loop = true, ramping = false, click = false, band = false;
     int speed = 100;
+    // The top string of the guitar played along on (MIDI), to shift the
+    // pitch to suit; 0 plays tabs as written.
+    int tuneTo = 0;
     // The window's place, if it's been moved; else it opens at the
     // default place.
     bool placed = false;

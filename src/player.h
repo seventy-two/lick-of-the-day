@@ -40,6 +40,9 @@ public:
     void SetClick(bool on);   // metronome, with a bar's count-in when starting
     // SetSolo plays only one track (-1 for all of them).
     void SetSolo(int track);
+    // SetTranspose moves every part but the drums and the click up or down,
+    // in semitones.
+    void SetTranspose(int semitones);
 
     // Position is where playing is, in seconds into the stretch at full
     // speed; negative during the count-in.
@@ -71,6 +74,7 @@ private:
     double speed_ = 1;
     bool loop_ = true, click_ = false;
     int solo_ = -1;
+    int transpose_ = 0;
 };
 
 }  // namespace dl

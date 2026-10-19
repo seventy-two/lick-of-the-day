@@ -1,5 +1,6 @@
 #include "daily.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -58,6 +59,22 @@ std::string DescribeTuning(const std::vector<int>& tuning, int capo) {
         for (int i = n - 1; i >= 0; i--) name += " " + note(tuning[size_t(i)]);
     }
     if (capo > 0) name += (name.empty() ? "" : ", ") + std::string("capo ") + std::to_string(capo);
+    return name;
+}
+
+int TopString(const std::vector<int>& tuning, int capo) { return tuning.empty() ? 64 : tuning[0] + capo; }
+
+int TransposeFor(const std::vector<int>& tuning, int capo, int guitarTop) {
+    if (guitarTop <= 0) return 0;
+    return std::clamp(guitarTop - TopString(tuning, capo), -12, 12);
+}
+
+std::string ShiftedTuningName(const std::vector<int>& tuning, int semitones) {
+    std::vector<int> t = tuning;
+    for (int& s : t) s += semitones;
+    std::string name = DescribeTuning(t, 0);
+    if (name.empty()) return "E standard";
+    if (name.rfind("Tuning ", 0) == 0) return name.substr(7);
     return name;
 }
 

@@ -50,6 +50,9 @@ private:
     void playPause();
     void toggle(bool& v);
     void applySpeed();
+    void applyPitch();
+    void changePitch(int delta);  // 0 goes back to as written
+    void changeRamp();
     void saveConfig();
     std::string today() const;
 
@@ -82,6 +85,7 @@ private:
     int speed_ = 100;     // percent, now; the ramp changes it
     int loopsSeen_ = 0;
     bool upToSpeed_ = false;
+    int transpose_ = 0;   // semitones, from cfg_.tuneTo and the tab's tuning
 
     float scale_ = 1;
     bool dark_ = true;

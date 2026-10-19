@@ -199,6 +199,7 @@ void App::loadSequence() {
     player_.SetSolo(cfg_.band ? -1 : l.track);
     player_.SetClick(cfg_.click);
     player_.SetLoop(cfg_.loop);
+    applyPitch();
     speed_ = cfg_.ramping ? cfg_.ramp.start : cfg_.speed;
     applySpeed();
     loopsSeen_ = 0;
@@ -206,6 +207,41 @@ void App::loadSequence() {
 }
 
 void App::applySpeed() { player_.SetSpeed(speed_ / 100.0); }
+
+void App::applyPitch() {
+    if (!lick_) return;
+    const Staff& st = lick_->score->tracks[size_t(lick_->lick.track)].staff;
+    transpose_ = TransposeFor(st.tuning, st.capo, cfg_.tuneTo);
+    player_.SetTranspose(transpose_);
+}
+
+void App::changePitch(int delta) {
+    if (!lick_) return;
+    const Staff& st = lick_->score->tracks[size_t(lick_->lick.track)].staff;
+    if (delta == 0) {
+        cfg_.tuneTo = 0;
+    } else {
+        // Remember the guitar, not the shift, so the next tab suits it too.
+        int t = std::clamp(transpose_ + delta, -12, 12);
+        cfg_.tuneTo = TopString(st.tuning, st.capo) + t;
+    }
+    applyPitch();
+    saveConfig();
+}
+
+void App::changeRamp() {
+    auto& r = cfg_.ramp;
+    r.start = std::clamp(r.start, 25, 150);
+    r.end = std::clamp(r.end, r.start, 150);
+    r.step = std::clamp(r.step, 1, 50);
+    if (cfg_.ramping) {
+        if (!player_.Playing()) speed_ = r.start;
+        speed_ = std::clamp(speed_, r.start, r.end);
+        upToSpeed_ = speed_ >= r.end;
+        applySpeed();
+    }
+    saveConfig();
+}
 
 void App::saveConfig() { SaveConfig(dir_, cfg_); }
 
@@ -372,7 +408,7 @@ void App::Frame() {
     ImGui::GetStyle().Colors[ImGuiCol_ScrollbarGrabHovered] = p.muted;
 
     // Keys, unless a modifier's held.
-    if (!io.KeyCtrl && !io.KeyAlt) {
+    if (!io.KeyCtrl && !io.KeyAlt && !io.WantTextInput) {
         if (ImGui::IsKeyPressed(ImGuiKey_Space, false)) playPause();
         if (ImGui::IsKeyPressed(ImGuiKey_L, false)) toggle(cfg_.loop);
         if (ImGui::IsKeyPressed(ImGuiKey_R, false)) toggle(cfg_.ramping);
@@ -383,6 +419,8 @@ void App::Frame() {
             tabScroll_ = 0;
             loadSequence();
         }
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) changePitch(1);
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) changePitch(-1);
         int delta = ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -5 : ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 5 : 0;
         if (delta) {
             speed_ = std::clamp(speed_ + delta, 25, 150);
@@ -485,6 +523,78 @@ void App::drawInfo(float width, float height) {
 
     // The controls, along the bottom.
     const float rowH = ImGui::GetFrameHeight();
+
+    // Above them, the pitch and the ramp's settings.
+    {
+        ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, panelMax_.y - 10 * k - 2 * rowH - 6 * k - small_->FontSize - 12 * k));
+        ImGui::BeginDisabled(!lick_);
+        ImGui::PushFont(small_);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(p.muted, "Pitch");
+        ImGui::PopFont();
+        ImGui::SameLine(0, 8 * k);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+        if (button("\xE2\x88\x92", false, false, "Down a semitone (\xE2\x86\x93)")) changePitch(-1);
+        ImGui::SameLine();
+        char pt[16];
+        std::snprintf(pt, sizeof(pt), transpose_ > 0 ? "+%d" : "%d", transpose_);
+        ImGui::PushStyleColor(ImGuiCol_Button, p.frame);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, p.hover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, p.hover);
+        ImGui::PushStyleColor(ImGuiCol_Text, transpose_ ? p.accent : p.text);
+        if (ImGui::Button(pt, ImVec2(40 * k, 0))) changePitch(0);
+        ImGui::PopStyleColor(4);
+        hot_.push_back({ImGui::GetItemRectMin(), ImGui::GetItemRectMax()});
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Semitones from the tab; click to play it as written");
+        ImGui::SameLine();
+        if (button("+", false, false, "Up a semitone (\xE2\x86\x91)")) changePitch(1);
+        ImGui::PopStyleVar();
+        if (lick_) {
+            const Staff& st = lick_->score->tracks[size_t(lick_->lick.track)].staff;
+            ImGui::SameLine(0, 8 * k);
+            ImGui::PushFont(small_);
+            ImGui::AlignTextToFramePadding();
+            std::string as = transpose_ ? "as " + ShiftedTuningName(st.tuning, transpose_) : "as written";
+            ImGui::TextColored(transpose_ ? p.accent : p.muted, "%s", as.c_str());
+            ImGui::PopFont();
+        }
+        ImGui::EndDisabled();
+
+        // The ramp's settings, on the right.
+        char rl[64];
+        std::snprintf(rl, sizeof(rl), "Ramp %d\xE2\x86\x92%d%%, +%d", cfg_.ramp.start, cfg_.ramp.end, cfg_.ramp.step);
+        ImGui::PushFont(small_);
+        float rw = ImGui::CalcTextSize(rl).x + 12 * k;
+        ImGui::SameLine(14 * k + inner - rw);
+        if (link(rl, false, "Change how the ramp goes")) ImGui::OpenPopup("ramp");
+        ImGui::PopFont();
+        ImGui::SetNextWindowPos(ImVec2(panelMax_.x - 8 * k, panelMin_.y + 8 * k), ImGuiCond_Appearing, ImVec2(1, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12 * k, 10 * k));
+        if (ImGui::BeginPopup("ramp")) {
+            ImGui::PushFont(small_);
+            auto field = [&](const char* label, const char* id, int& v, int step) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(p.muted, "%s", label);
+                ImGui::SameLine(110 * k);
+                ImGui::SetNextItemWidth(110 * k);
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, p.frame);
+                ImGui::PushStyleColor(ImGuiCol_Button, p.frame);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, p.hover);
+                if (ImGui::InputInt(id, &v, step, step)) changeRamp();
+                ImGui::PopStyleColor(3);
+            };
+            field("Start at %", "##start", cfg_.ramp.start, 5);
+            field("Up to %", "##end", cfg_.ramp.end, 5);
+            field("Faster by %", "##step", cfg_.ramp.step, 1);
+            ImGui::TextColored(p.muted, "each time round");
+            ImGui::PopFont();
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+            hot_.push_back({ImGui::GetWindowPos(), ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                          ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)});
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleVar();
+    }
     ImGui::SetCursorScreenPos(ImVec2(panelMin_.x + 14 * k, panelMax_.y - 10 * k - rowH - 6 * k - small_->FontSize - 6 * k));
     ImGui::BeginDisabled(!lick_ || !playerError_.empty());
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12 * k, 4 * k));
@@ -540,8 +650,7 @@ void App::drawInfo(float width, float height) {
     } else {
         int loops = player_.Loops();
         if (cfg_.ramping) {
-            if (upToSpeed_ || speed_ >= cfg_.ramp.end) status = "Up to speed";
-            else status = "Ramp " + std::to_string(cfg_.ramp.start) + "\xE2\x86\x92" + std::to_string(cfg_.ramp.end) + "%, +" + std::to_string(cfg_.ramp.step) + " a time";
+            if (player_.Playing() || loops > 0) status = upToSpeed_ || speed_ >= cfg_.ramp.end ? "Up to speed" : "Speeding up";
         }
         if (cfg_.loop && (player_.Playing() || loops > 0)) {
             std::string lp = "Loop " + std::to_string(loops + 1);

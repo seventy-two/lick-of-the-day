@@ -187,7 +187,8 @@ Config LoadConfig(const std::string& dir, const std::vector<std::string>& defaul
         c.ramp.step = r.value("step", c.ramp.step);
         c.ramp.end = r.value("end", c.ramp.end);
     }
-    if (c.ramp.start < 10 || c.ramp.start > 200 || c.ramp.end < c.ramp.start || c.ramp.step < 1) c.ramp = Ramp{};
+    if (c.ramp.start < 25 || c.ramp.end > 150 || c.ramp.end < c.ramp.start || c.ramp.step < 1 || c.ramp.step > 50)
+        c.ramp = Ramp{};
     get("repeatDays", c.repeatDays);
     get("loop", c.loop);
     get("ramping", c.ramping);
@@ -195,6 +196,8 @@ Config LoadConfig(const std::string& dir, const std::vector<std::string>& defaul
     get("band", c.band);
     get("speed", c.speed);
     c.speed = std::clamp(c.speed, 25, 150);
+    get("tuneTo", c.tuneTo);
+    if (c.tuneTo < 0 || c.tuneTo > 127) c.tuneTo = 0;
     if (j.contains("window") && j["window"].is_object()) {
         auto& w = j["window"];
         c.x = w.value("x", 0);
@@ -214,7 +217,8 @@ bool SaveConfig(const std::string& dir, const Config& c) {
               {"ramping", c.ramping},
               {"click", c.click},
               {"band", c.band},
-              {"speed", c.speed}};
+              {"speed", c.speed},
+              {"tuneTo", c.tuneTo}};
     if (c.placed) j["window"] = {{"x", c.x}, {"y", c.y}, {"w", c.w}, {"h", c.h}};
     return writeAtomically(toPath(dir) / "config.json", j.dump(1));
 }
