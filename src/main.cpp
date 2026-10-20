@@ -237,9 +237,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int) {
     GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
     int w = int(1600 * scale), h = int(220 * scale);
     int x = (mi.rcWork.left + mi.rcWork.right - w) / 2, y = mi.rcWork.bottom - h - int(16 * scale);
-    // A tool window: no taskbar button or Alt+Tab entry; kitchensink's
-    // button hides and shows it.
-    hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kClassName, L"Lick of the Day", WS_OVERLAPPEDWINDOW, x, y, w, h, nullptr, nullptr, instance,
+    // Owned by a hidden window, so it has no taskbar button (kitchensink's
+    // button hides and shows it) but is still an ordinary window, which
+    // FancyZones and the like will snap; a tool window they leave alone.
+    WNDCLASSEXW oc{sizeof(oc)};
+    oc.lpfnWndProc = DefWindowProcW;
+    oc.hInstance = instance;
+    oc.lpszClassName = L"dailylick-owner";
+    RegisterClassExW(&oc);
+    HWND owner = CreateWindowExW(0, oc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
+    hwnd = CreateWindowExW(0, kClassName, L"Lick of the Day", WS_OVERLAPPEDWINDOW, x, y, w, h, owner, nullptr, instance,
                            nullptr);
     MARGINS margins{0, 0, 0, 1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
