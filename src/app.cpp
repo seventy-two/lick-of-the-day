@@ -364,6 +364,19 @@ void App::toggle(bool& v) {
 
 bool App::Animating() const { return player_.Playing() || searching_ || panelShown_ != panelTarget_; }
 
+void App::Show(bool shown) {
+    if (shown) {
+        ShowWindow(hwnd_, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd_);
+    } else {
+        if (player_.Playing()) player_.Pause();
+        ShowWindow(hwnd_, SW_HIDE);
+    }
+    if (cfg_.shown == shown) return;
+    cfg_.shown = shown;
+    saveConfig();
+}
+
 bool App::Place(RECT& r) const {
     if (!cfg_.placed) return false;
     r = RECT{cfg_.x, cfg_.y, cfg_.x + cfg_.w, cfg_.y + cfg_.h};
@@ -577,6 +590,7 @@ void App::drawInfo(float width, float height) {
             ImGui::PopID();
             hot_.push_back({ImGui::GetItemRectMin(), ImGui::GetItemRectMax()});
             if (i == 0 && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Favourites and history (H)");
+            if (i == 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Hide");
             if (pressed && i == 0) openKept_ = true;
             else if (pressed) PostMessageW(hwnd_, i == 1 ? WM_SYSCOMMAND : WM_CLOSE, i == 1 ? SC_MINIMIZE : 0, 0);
         }

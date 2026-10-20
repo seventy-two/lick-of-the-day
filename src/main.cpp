@@ -21,6 +21,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 namespace {
 
 constexpr UINT WM_APP_WAKE = WM_APP + 1;
+// Sent by kitchensink's button (and a second start) to hide or show it.
+constexpr UINT WM_APP_TOGGLE = WM_APP + 2;
+constexpr UINT WM_APP_SHOW = WM_APP + 3;
 const wchar_t* kClassName = L"dailylick";
 
 ID3D11Device* device = nullptr;
@@ -180,6 +183,19 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_SETTINGCHANGE:
         if (lParam && wcscmp(reinterpret_cast<const wchar_t*>(lParam), L"ImmersiveColorSet") == 0) applyTheme();
         return 0;
+    case WM_SYSCOMMAND:
+        // It has no taskbar button to come back from, so minimising hides it.
+        if ((wParam & 0xFFF0) == SC_MINIMIZE) {
+            if (app) app->Show(false);
+            return 0;
+        }
+        break;
+    case WM_APP_TOGGLE:
+        if (app) app->Show(!IsWindowVisible(h));
+        return 0;
+    case WM_APP_SHOW:
+        if (app) app->Show(true);
+        return 0;
     case WM_DESTROY: PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(h, msg, wParam, lParam);
@@ -187,13 +203,16 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 }  // namespace
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int) {
+    // -background (kitchensink starting it) stays hidden if it was hidden;
+    // any other start shows it.
+    bool background = wcsstr(cmdLine, L"-background") != nullptr;
     // One at a time: a second start brings the first forward.
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\dailylick");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        if (HWND other = FindWindowW(kClassName, nullptr)) {
-            ShowWindow(other, SW_RESTORE);
-            SetForegroundWindow(other);
+        if (HWND other = FindWindowW(kClassName, nullptr); other && !background) {
+            AllowSetForegroundWindow(ASFW_ANY);
+            PostMessageW(other, WM_APP_SHOW, 0, 0);
         }
         return 0;
     }
@@ -218,7 +237,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
     int w = int(1600 * scale), h = int(220 * scale);
     int x = (mi.rcWork.left + mi.rcWork.right - w) / 2, y = mi.rcWork.bottom - h - int(16 * scale);
-    hwnd = CreateWindowExW(0, kClassName, L"Lick of the Day", WS_OVERLAPPEDWINDOW, x, y, w, h, nullptr, nullptr, instance,
+    // A tool window: no taskbar button or Alt+Tab entry; kitchensink's
+    // button hides and shows it.
+    hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kClassName, L"Lick of the Day", WS_OVERLAPPEDWINDOW, x, y, w, h, nullptr, nullptr, instance,
                            nullptr);
     MARGINS margins{0, 0, 0, 1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
@@ -242,8 +263,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (app->Place(placed))
         SetWindowPos(hwnd, nullptr, placed.left, placed.top, placed.right - placed.left, placed.bottom - placed.top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-    ShowWindow(hwnd, SW_SHOWNORMAL);
-    UpdateWindow(hwnd);
+    if (!background || app->Shown()) {
+        app->Show(true);
+        UpdateWindow(hwnd);
+    }
 
     // Draw on input, while playing (the cursor moves), and once a second
     // otherwise, which also notices a new day.

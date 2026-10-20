@@ -84,6 +84,7 @@ struct Config {
     // pitch to suit; 0 plays tabs as written.
     int tuneTo = 0;
     bool panel = true;  // the left panel shown, not tucked away
+    bool shown = true;  // false while hidden (kitchensink's button brings it back)
     // The window's place, if it's been moved; else it opens at the
     // default place.
     bool placed = false;

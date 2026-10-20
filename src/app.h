@@ -43,6 +43,10 @@ public:
     bool Place(RECT& r) const;
     void SavePlace(const RECT& r);
 
+    // Show shows or hides the window (hiding pauses it), remembering which.
+    void Show(bool shown);
+    bool Shown() const { return cfg_.shown; }
+
 private:
     void startFind(bool skip);
     // startOpen loads a kept lick (from date) in place of today's.

@@ -82,6 +82,11 @@ kitchensink's Windows client, and builds to a single `dailylick.exe`.
 Pausing and playing again starts the lick from the top (the ramp carries
 on where it was).
 
+It has no taskbar button: it's meant to be hidden and shown by
+kitchensink's Windows client, which starts it with `-background` (staying
+hidden if it was hidden) and posts it `WM_APP + 2` to hide or show it.
+Minimising hides it; starting it again shows it.
+
 Keys: Space play/pause, L loop, R ramp, Home start the ramp again,
 ← → speed, ↑ ↓ pitch, M click, B band, S whole solo, F favourite,
 H favourites and history, P tuck the panel away or bring it back.
@@ -93,8 +98,8 @@ H favourites and history, P tuck the panel away or bring it back.
 - `config.json`: `folders` searched for tabs (with subfolders; Documents\guitar
   and Downloads at first), `ramp` (`start`, `step`, `end`, in percent),
   `repeatDays`, the player's switches, `tuneTo` (the guitar's top string
-  as a MIDI note, 0 for as written), `panel` (shown or tucked away), and
-  the window's place.
+  as a MIDI note, 0 for as written), `panel` (shown or tucked away), `shown`
+  (false while hidden), and the window's place.
 - `state.json`: each day's lick and what was skipped, the favourites and
   solos done, and the files found to have no solo (not read again until
   they change).
